@@ -1,17 +1,31 @@
-import Link from 'next/link';
+'use client';
 
-export default function Home() {
+import { useEffect, useState } from 'react';
+import Nav, { type View } from '@/components/Nav';
+import TvBoard from '@/components/TvBoard';
+import Analysis from '@/components/Analysis';
+
+/** One URL for the whole dashboard — the menu swaps the view, no navigation. */
+export default function Dashboard() {
+  const [view, setView] = useState<View>('tv');
+
+  // Remember the view so a reloaded TV comes back to the board, not a menu.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('chunk-view');
+      if (saved === 'tv' || saved === 'analysis') setView(saved);
+    } catch {}
+  }, []);
+
+  const select = (v: View) => {
+    setView(v);
+    try { localStorage.setItem('chunk-view', v); } catch {}
+  };
+
   return (
-    <main style={{ maxWidth: 640, margin: '0 auto', padding: 'var(--space-8) var(--space-5)' }}>
-      <h1 style={{ fontSize: 'var(--text-3xl)', letterSpacing: 'var(--track-3xl)',
-                   lineHeight: 'var(--lead-3xl)', fontWeight: 700, margin: '0 0 var(--space-5)' }}>
-        Chunk · Ventas
-      </h1>
-      <Link href="/tv" style={{ display: 'inline-block', background: 'var(--accent)',
-            color: 'var(--accent-contrast)', padding: '12px 22px', borderRadius: 'var(--radius-sm)',
-            fontWeight: 600 }}>
-        Modo TV
-      </Link>
-    </main>
+    <>
+      <Nav view={view} onSelect={select} />
+      {view === 'tv' ? <TvBoard /> : <Analysis />}
+    </>
   );
 }

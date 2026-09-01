@@ -17,7 +17,7 @@ const json = (body: any) =>
 export async function GET(req: Request) {
   // A wall display should say WHY it's blank, not just go dark.
   const missing = REQUIRED.filter((k) => !process.env[k]);
-  if (missing.length) return json({ error: `Faltan variables de entorno: ${missing.join(', ')}` });
+  if (missing.length) return json({ error: `Missing environment variables: ${missing.join(', ')}` });
 
   const backfill = new URL(req.url).searchParams.get('backfill') === '1';
   let refresh: any = null;
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
 
   let d: Awaited<ReturnType<typeof loadTv>>;
   try { d = await loadTv(); }
-  catch (e: any) { return json({ error: `Base de datos: ${e.message}`.slice(0, 300) }); }
+  catch (e: any) { return json({ error: `Database: ${e.message}`.slice(0, 300) }); }
 
   const sum = (rows: OrderRow[]) => rows.reduce((s, r) => s + Number(r.total || 0), 0);
 

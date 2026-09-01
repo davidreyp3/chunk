@@ -2,3 +2,9 @@
 
 html, body { padding: 0; margin: 0; }
 a { color: inherit; text-decoration: none; }
+
+/* Últimas ventas carousel — the one piece of motion on the wall board,
+   because a static list can only show three sales at this type size. */
+@keyframes tv-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.tv-marquee { animation: tv-marquee 48s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .tv-marquee { animation: none; } }
