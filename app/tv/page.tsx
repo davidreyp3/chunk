@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'react';
+
+const W = 1920, H = 1080;
 
 /* Palettes lifted from the Claude Design handoff, unchanged. */
 const THEMES: Record<'dark' | 'light', Record<string, string>> = {
@@ -56,6 +58,32 @@ export default function TvPage() {
   const [data, setData] = useState<Payload | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [scale, setScale] = useState(1);
+
+  // Compose at a fixed 1920x1080 and scale to fit. A wall display can be any
+  // size or aspect; guessing its height is what broke the first version.
+  const [narrow, setNarrow] = useState(false);
+  const boardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth < 900);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Measure the board's real height rather than assuming 1080 — arithmetic on
+  // font metrics is how the first three attempts clipped their bottom rows.
+  useLayoutEffect(() => {
+    const fit = () => {
+      const h = boardRef.current?.scrollHeight ?? H;
+      setScale(Math.min(window.innerWidth / W, window.innerHeight / Math.max(h, 1)));
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    const t = setInterval(fit, 2000);
+    return () => { window.removeEventListener('resize', fit); clearInterval(t); };
+  }, [data, narrow]);
 
   useEffect(() => {
     try {
@@ -90,8 +118,13 @@ export default function TvPage() {
   }, []);
 
   const vars = THEMES[theme] as React.CSSProperties;
+  const stage: React.CSSProperties = {
+    ...vars, position: 'fixed', inset: 0, background: 'var(--tv-bg)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  };
   const root: React.CSSProperties = {
-    ...vars, width: '100vw', height: '100vh', background: 'var(--tv-bg)', color: 'var(--tv-ink)',
+    width: W, flex: 'none', transform: `scale(${scale})`, transformOrigin: 'center',
+    background: 'var(--tv-bg)', color: 'var(--tv-ink)',
     fontFamily: '-apple-system,BlinkMacSystemFont,system-ui,"Helvetica Neue",Helvetica,Arial,sans-serif',
     fontVariantNumeric: 'tabular-nums', padding: '30px 40px 28px',
     display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden',
@@ -99,13 +132,17 @@ export default function TvPage() {
 
   if (!data || data.error) {
     return (
-      <div style={root}>
-        <div style={{ fontSize: 34, fontWeight: 600, color: 'var(--tv-accent)', maxWidth: '80%' }}>
-          {data?.error ?? (err ? `Sin conexión — ${err}` : 'Cargando…')}
+      <div style={stage}>
+        <div style={root}>
+          <div style={{ fontSize: 34, fontWeight: 600, color: 'var(--tv-accent)', maxWidth: '80%' }}>
+            {data?.error ?? (err ? `Sin conexión — ${err}` : 'Cargando…')}
+          </div>
         </div>
       </div>
     );
   }
+
+  if (narrow) return <Phone data={data} vars={vars} err={err} onToggle={toggle} />;
 
   const { total, month, special } = data;
   const peak = Math.max(...data.hours.map((h) => Math.max(h.today, h.typical)), 1);
@@ -120,7 +157,8 @@ export default function TvPage() {
   const panel: React.CSSProperties = { background: 'var(--tv-panel)', borderRadius: 24 };
 
   return (
-    <div style={root}>
+    <div style={stage}>
+    <div ref={boardRef} style={root}>
       {/* header */}
       <div style={{ height: 70, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 'none' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
@@ -142,7 +180,7 @@ export default function TvPage() {
       </div>
 
       {/* revenue + locations */}
-      <div style={{ display: 'flex', gap: 16, height: 272, flex: 'none' }}>
+      <div style={{ display: 'flex', gap: 16, flex: 'none' }}>
         <div style={{ ...panel, width: 700, padding: '30px 44px', display: 'flex',
                       flexDirection: 'column', justifyContent: 'space-between' }}>
           <div style={L}>Ingresos hoy</div>
@@ -204,7 +242,7 @@ export default function TvPage() {
       </div>
 
       {/* hourly + monthly flavour */}
-      <div style={{ display: 'flex', gap: 16, height: 258, flex: 'none' }}>
+      <div style={{ display: 'flex', gap: 16, flex: 'none' }}>
         <div style={{ ...panel, flex: 1, padding: '30px 40px 28px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
             <div style={L}>Transacciones por hora</div>
@@ -216,7 +254,7 @@ export default function TvPage() {
                 {weekday(data.day)} típico</div>
             </div>
           </div>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 16 }}>
+          <div style={{ height: 168, display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 16 }}>
             {data.hours.map((h) => (
               <div key={h.hour} style={{ flex: 1, display: 'flex', flexDirection: 'column',
                                          alignItems: 'center', gap: 12 }}>
@@ -275,7 +313,8 @@ export default function TvPage() {
                   <div style={{ position: 'absolute', top: -7, bottom: -7, right: 0, width: 3,
                                 background: 'var(--tv-ink3)' }} />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 26 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 26,
+                              whiteSpace: 'nowrap', gap: 16 }}>
                   <div style={{ fontWeight: 600, color: 'var(--tv-accent)' }}>
                     {(special.monthShare ?? 0).toFixed(1)}% {special.flavour}
                   </div>
@@ -293,7 +332,7 @@ export default function TvPage() {
       </div>
 
       {/* top 5 + month vs target */}
-      <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', gap: 16, flex: 'none' }}>
         <div style={{ ...panel, flex: 1, padding: '22px 36px', display: 'flex',
                       flexDirection: 'column', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
@@ -359,7 +398,7 @@ export default function TvPage() {
       </div>
 
       {/* last sales */}
-      <div style={{ height: 48, flex: 'none', display: 'flex', alignItems: 'center', gap: 30,
+      <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 30, paddingTop: 4,
                     overflow: 'hidden', color: 'var(--tv-ink4)', fontSize: 27 }}>
         <div style={{ ...L, fontSize: 24, flex: 'none' }}>Últimas ventas</div>
         {data.ticker.slice(0, 6).map((t, i) => (
@@ -369,6 +408,177 @@ export default function TvPage() {
             <span style={{ color: 'var(--tv-ink2)', fontWeight: 600 }}>{money2(t.amount)}</span>
           </div>
         ))}
+      </div>
+    </div>
+    </div>
+  );
+}
+
+/* ---------- Phone / tablet ---------- */
+
+function Phone({ data, vars, err, onToggle }: {
+  data: Payload; vars: React.CSSProperties; err: string | null; onToggle: () => void;
+}) {
+  const { total, month, special } = data;
+  const pos = (v: number | null) => v != null && v >= 0;
+  const pct = month.target ? (month.mtd / month.target) * 100 : null;
+  const peak = Math.max(...data.hours.map((h) => Math.max(h.today, h.typical)), 1);
+
+  const page: React.CSSProperties = {
+    ...vars, minHeight: '100vh', background: 'var(--tv-bg)', color: 'var(--tv-ink)',
+    fontFamily: '-apple-system,BlinkMacSystemFont,system-ui,"Helvetica Neue",Helvetica,Arial,sans-serif',
+    fontVariantNumeric: 'tabular-nums', padding: '18px 16px 32px',
+    display: 'flex', flexDirection: 'column', gap: 12,
+  };
+  const card: React.CSSProperties = { background: 'var(--tv-panel)', borderRadius: 18, padding: '18px 20px' };
+  const cap: React.CSSProperties = { fontSize: 12, fontWeight: 700, letterSpacing: '.1em',
+                                     textTransform: 'uppercase', color: 'var(--tv-ink3)' };
+  const sub: React.CSSProperties = { fontSize: 14, color: 'var(--tv-ink4)' };
+
+  return (
+    <div style={page}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ ...cap, fontSize: 13 }}>Ventas de hoy</div>
+        <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 8, ...sub }}>
+          <span style={{ width: 8, height: 8, borderRadius: 999,
+                         background: err ? 'var(--tv-neg)' : 'var(--tv-pos)' }} />
+          {clock(data.updatedAt)}
+        </div>
+      </div>
+      <div style={{ fontSize: 15, color: 'var(--tv-ink2)' }}>{longDate(data.day)}</div>
+
+      <div style={card}>
+        <div style={cap}>Ingresos hoy</div>
+        <div style={{ fontSize: 52, fontWeight: 700, letterSpacing: '-.03em', lineHeight: 1.05, margin: '6px 0 10px' }}>
+          {money(total.revenue)}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {total.deltaPct != null && (
+            <span style={{ borderRadius: 999, padding: '5px 12px', fontSize: 15, fontWeight: 700,
+                           background: pos(total.deltaPct) ? 'var(--tv-pos)' : 'var(--tv-neg)',
+                           color: 'var(--tv-on-pos)' }}>
+              {pos(total.deltaPct) ? '▲' : '▼'} {(total.deltaPct >= 0 ? '+' : '') + total.deltaPct.toFixed(1)}%
+            </span>
+          )}
+          <span style={sub}>vs {weekday(data.day)} promedio · {money(total.typical)}</span>
+        </div>
+      </div>
+
+      {data.locations.filter((l) => l.open).map((l) => (
+        <div key={l.id} style={{ ...card, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 600 }}>{l.name}</div>
+            <div style={sub}>{l.orders} tx · {money2(l.avgTicket)}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-.02em' }}>{money(l.revenue)}</div>
+            {l.deltaPct != null && (
+              <div style={{ fontSize: 14, fontWeight: 600,
+                            color: pos(l.deltaPct) ? 'var(--tv-pos)' : 'var(--tv-neg)' }}>
+                {pos(l.deltaPct) ? '▲' : '▼'} {Math.abs(l.deltaPct).toFixed(1)}%
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+
+      <div style={card}>
+        <div style={cap}>Transacciones por hora</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 96, marginTop: 14 }}>
+          {data.hours.map((h) => (
+            <div key={h.hour} style={{ flex: 1, display: 'flex', flexDirection: 'column',
+                                       alignItems: 'center', gap: 5 }}>
+              <div style={{ width: '100%', height: 72, position: 'relative' }}>
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0,
+                              height: Math.max(2, (h.typical / peak) * 72),
+                              background: 'var(--tv-ghost)', borderRadius: 3 }} />
+                <div style={{ position: 'absolute', bottom: 0, left: '22%', width: '56%',
+                              height: Math.max(h.today ? 2 : 0, (h.today / peak) * 72),
+                              background: 'var(--tv-bar)', borderRadius: 3 }} />
+              </div>
+              <div style={{ fontSize: 9, color: 'var(--tv-ink5)' }}>{h.hour}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {special.flavour && (
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={cap}>Sabor del mes</div>
+            <div style={sub}>{special.unitsToday} hoy · {special.pctToday.toFixed(1)}% del mix</div>
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-.02em', margin: '8px 0 12px' }}>
+            {special.flavour}
+          </div>
+          <div style={{ height: 12, background: 'var(--tv-track)', borderRadius: 4, position: 'relative' }}>
+            <div style={{ position: 'absolute', inset: '0 auto 0 0', borderRadius: 4,
+                          width: `${Math.min(100, ((special.monthShare ?? 0) / Math.max(special.pastBest?.pct ?? 1, 1)) * 100)}%`,
+                          background: 'var(--tv-accent)' }} />
+          </div>
+          <div style={{ marginTop: 10, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div>
+              <span style={{ color: 'var(--tv-accent)', fontWeight: 700 }}>{(special.monthShare ?? 0).toFixed(1)}%</span>
+              <span style={sub}> este mes · {(special.pastAverage ?? 0).toFixed(1)}% promedio histórico</span>
+            </div>
+            <div style={sub}>
+              Mejor especial: {special.pastBest?.flavour} · {(special.pastBest?.pct ?? 0).toFixed(1)}%
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <div style={cap}>Top 5 galletas hoy</div>
+          <div style={sub}>{data.cookieUnits} galletas</div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
+          {data.topFlavours.map((f) => (
+            <div key={f.name} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 15, whiteSpace: 'nowrap',
+                            overflow: 'hidden', textOverflow: 'ellipsis',
+                            fontWeight: f.isSpecial ? 700 : 400,
+                            color: f.isSpecial ? 'var(--tv-accent)' : 'var(--tv-ink2)' }}>
+                {f.name}
+              </div>
+              <div style={{ width: 90, height: 8, background: 'var(--tv-track)', borderRadius: 4 }}>
+                <div style={{ height: 8, borderRadius: 4,
+                              width: `${(f.units / (data.topFlavours[0]?.units || 1)) * 100}%`,
+                              background: f.isSpecial ? 'var(--tv-accent)' : 'var(--tv-bar)' }} />
+              </div>
+              <div style={{ width: 38, textAlign: 'right', fontSize: 17, fontWeight: 700 }}>{f.units}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <div style={cap}>Mes vs meta</div>
+          <div style={sub}>{month.target ? money(month.target) : 'meta no configurada'}</div>
+        </div>
+        <div style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-.02em', margin: '8px 0 12px' }}>
+          {money(month.mtd)}
+        </div>
+        <div style={{ height: 12, background: 'var(--tv-track)', borderRadius: 4, overflow: 'hidden' }}>
+          {pct != null && <div style={{ height: 12, width: `${Math.min(100, pct)}%`, background: 'var(--tv-bar)' }} />}
+        </div>
+        <div style={{ ...sub, marginTop: 8 }}>día {month.dayOfMonth} de {month.daysInMonth} · todos los canales</div>
+      </div>
+
+      <div style={card}>
+        <div style={cap}>Últimas ventas</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 12 }}>
+          {data.ticker.slice(0, 8).map((t, i) => (
+            <div key={i} style={{ display: 'flex', gap: 10, fontSize: 14, alignItems: 'baseline' }}>
+              <span style={{ color: 'var(--tv-ink5)', flex: 'none' }}>{t.time}</span>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap',
+                             textOverflow: 'ellipsis', color: 'var(--tv-ink3)' }}>{t.detail}</span>
+              <span style={{ fontWeight: 700, flex: 'none' }}>{money2(t.amount)}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
