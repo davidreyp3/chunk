@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 type Payload = {
+  error?: string;
   day: string; updatedAt: string;
   total: { revenue: number; typical: number; deltaPct: number | null; orders: number; avgTicket: number };
   locations: { id: number; name: string; revenue: number; orders: number; avgTicket: number; deltaPct: number | null }[];
@@ -44,9 +45,14 @@ export default function TvPage() {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  if (!data) {
-    return <main style={S.wrap}><div style={{ ...S.label, fontSize: 30 }}>
-      {err ? `Sin conexión — ${err}` : 'Cargando…'}</div></main>;
+  if (!data || data.error) {
+    return (
+      <main style={S.wrap}>
+        <div style={{ ...S.label, fontSize: 34, color: 'var(--status-warn)', maxWidth: '80%' }}>
+          {data?.error ?? (err ? `Sin conexión — ${err}` : 'Cargando…')}
+        </div>
+      </main>
+    );
   }
 
   const peak = Math.max(...data.hours.map((h) => Math.max(h.today, h.typical)), 1);

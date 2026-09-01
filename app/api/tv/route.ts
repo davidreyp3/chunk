@@ -13,7 +13,22 @@ type OrderRow = {
 
 const RETAIL = new Set(['walk_in', 'marketplace', 'clau']);
 
+const REQUIRED = [
+  'SUPABASE_URL', 'SUPABASE_SECRET_KEY',
+  'INVU_TOCUMEN_USER', 'INVU_TOCUMEN_PASS',
+  'INVU_SUNSET_USER', 'INVU_SUNSET_PASS',
+] as const;
+
 export async function GET(req: Request) {
+  // A wall display should say WHY it's blank, not just go dark.
+  const missing = REQUIRED.filter((k) => !process.env[k]);
+  if (missing.length) {
+    return NextResponse.json(
+      { error: `Faltan variables de entorno: ${missing.join(', ')}`, missing },
+      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+
   const backfill = new URL(req.url).searchParams.get('backfill') === '1';
 
   let refresh: any = null;
@@ -26,13 +41,23 @@ export async function GET(req: Request) {
   const today = businessToday();
   const priors = priorSameWeekdays(today, 4);
 
-  const [locations, todayRows, priorRows, cookies] = await Promise.all([
-    select<{ id: number; name: string }>('locations?select=id,name&active=is.true&order=id'),
-    select<OrderRow>(`orders?select=location_id,hour_of_day,total,channel,status,business_date&business_date=eq.${today}`),
-    select<OrderRow>(`orders?select=location_id,hour_of_day,total,channel,status,business_date&business_date=in.(${priors.join(',')})`),
-    select<{ location_id: number; flavour: string; units: string | number; counts_as_retail: boolean }>(
-      `v_cookie_units?select=location_id,flavour,units,counts_as_retail&business_date=eq.${today}`),
-  ]);
+  let locations: { id: number; name: string }[] = [];
+  let todayRows: OrderRow[] = [], priorRows: OrderRow[] = [];
+  let cookies: { location_id: number; flavour: string; units: string | number; counts_as_retail: boolean }[] = [];
+  try {
+    [locations, todayRows, priorRows, cookies] = await Promise.all([
+      select<{ id: number; name: string }>('locations?select=id,name&active=is.true&order=id'),
+      select<OrderRow>(`orders?select=location_id,hour_of_day,total,channel,status,business_date&business_date=eq.${today}`),
+      select<OrderRow>(`orders?select=location_id,hour_of_day,total,channel,status,business_date&business_date=in.(${priors.join(',')})`),
+      select<{ location_id: number; flavour: string; units: string | number; counts_as_retail: boolean }>(
+        `v_cookie_units?select=location_id,flavour,units,counts_as_retail&business_date=eq.${today}`),
+    ]);
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: `Base de datos: ${e.message}`.slice(0, 300) },
+      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
 
   const live = (r: OrderRow) => r.status !== 'Nota Credito';
   const retail = (r: OrderRow) => live(r) && RETAIL.has(r.channel);
