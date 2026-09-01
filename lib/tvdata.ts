@@ -81,7 +81,7 @@ export async function loadTv() {
   const ym = monthOf(today);
   const priors = priorSameWeekdays(today, 4);
 
-  const [locations, todayRows, priorRows, cookiesToday, flavourMonths, monthRows, targets, ticker] =
+  const [locations, todayRows, priorRows, cookiesToday, flavourMonths, monthRows, targets, calendar, ticker] =
     await Promise.all([
       select<{ id: number; name: string; code: string; opened_on: string | null }>(
         'locations?select=id,name,code,opened_on&order=id'),
@@ -93,11 +93,13 @@ export async function loadTv() {
       select<OrderRow>(`orders?select=location_id,total,channel,status,business_date&business_date=gte.${ym}-01`),
       select<{ location_id: number; year_month: string; revenue_target: string }>(
         `targets?select=location_id,year_month,revenue_target&year_month=eq.${ym}-01`),
+      select<{ flavour: string }>(
+        `flavour_calendar?select=flavour&role=eq.monthly_special&year_month=eq.${ym}-01`),
       select<{ closed_at: string; channel: string; total: string; location_id: number;
                order_lines: { product_name: string; qty: number }[] }>(
         `orders?select=closed_at,channel,total,location_id,order_lines(product_name,qty)` +
         `&business_date=eq.${today}&order=closed_at.desc`).then((r) => r.slice(0, 14)),
     ]);
 
-  return { today, ym, priors, locations, todayRows, priorRows, cookiesToday, flavourMonths, monthRows, targets, ticker };
+  return { today, ym, priors, locations, todayRows, priorRows, cookiesToday, flavourMonths, monthRows, targets, calendar, ticker };
 }

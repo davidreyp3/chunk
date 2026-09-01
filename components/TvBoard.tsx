@@ -264,7 +264,7 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
                 typical {weekday(data.day)}</div>
             </div>
           </div>
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 12, marginTop: 10 }}>
+          <div style={{ height: 156, flex: 'none', display: 'flex', gap: 12, marginTop: 10 }}>
             <div style={{ width: 74, flex: 'none', position: 'relative', paddingBottom: 33 }}>
               {ticks.map((t) => (
                 <div key={t} style={{ position: 'absolute', right: 0, bottom: `${(t / top) * 100}%`,
@@ -364,7 +364,14 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
               </div>
             </>
           ) : (
-            <div style={{ fontSize: 32, color: 'var(--tv-ink4)' }}>No monthly special detected</div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column',
+                          justifyContent: 'center', gap: 8 }}>
+              <div style={{ fontSize: 38, fontWeight: 600, letterSpacing: '-0.02em',
+                            color: 'var(--tv-ink3)' }}>Not yet</div>
+              <div style={{ fontSize: 25, color: 'var(--tv-ink4)', lineHeight: 1.3 }}>
+                This month&rsquo;s flavour appears here once it starts selling.
+              </div>
+            </div>
           )}
         </div>
       </div>

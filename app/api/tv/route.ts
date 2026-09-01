@@ -62,7 +62,23 @@ export async function GET(req: Request) {
     flavourToday.set(c.flavour, (flavourToday.get(c.flavour) || 0) + u);
     cookieUnits += u;
   }
-  const special = inferMonthlySpecial(d.flavourMonths, d.ym);
+  const inferred = inferMonthlySpecial(d.flavourMonths, d.ym);
+  // The calendar is the source of truth; inference is the fallback for months
+  // nobody recorded. That's what lets the panel say "0" instead of nothing.
+  const flavour = d.calendar[0]?.flavour ?? inferred.current?.flavour ?? null;
+  const monthUnits = new Map<string, number>();
+  let monthCookies = 0;
+  for (const r of d.flavourMonths) {
+    if (r.month.slice(0, 7) !== d.ym) continue;
+    const u = Number(r.units || 0);
+    monthUnits.set(r.flavour, (monthUnits.get(r.flavour) || 0) + u);
+    monthCookies += u;
+  }
+  const special = {
+    ...inferred,
+    current: flavour ? { flavour, pct: 0 } : null,
+    monthShare: flavour && monthCookies ? (100 * (monthUnits.get(flavour) ?? 0)) / monthCookies : 0,
+  };
   const topFlavours = [...flavourToday.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([name, units]) => ({
       name, units,
