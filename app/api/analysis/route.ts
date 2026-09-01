@@ -5,7 +5,10 @@ import { businessToday } from '@/lib/panama';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const RETAIL = new Set(['walk_in', 'marketplace', 'clau']);
+const ALL_CHANNELS = ['walk_in', 'marketplace', 'clau', 'wholesale', 'eventos', 'unclassified'];
+/** Wholesale and events are invoiced and lumpy — including them skews average
+ *  ticket badly, so the UI warns when they're switched on. */
+const SKEWS_TICKET = new Set(['wholesale', 'eventos']);
 
 /** Tocumen opened here — volume roughly tripled, so any range spanning this
  *  date is comparing two different businesses. */
@@ -24,6 +27,10 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const to = url.searchParams.get('to') || businessToday();
   const from = url.searchParams.get('from') || '2024-10-01';
+  const param = url.searchParams.get('channels');
+  const selected = new Set(param !== null
+    ? param.split(',').filter(Boolean)
+    : ALL_CHANNELS);
 
   let daily: Daily[], cookies: CookieDay[], flavourMonths: any[], calendar: any[], locations: any[];
   try {
@@ -42,22 +49,25 @@ export async function GET(req: Request) {
   }
 
   const n = (v: any) => Number(v || 0);
-  const isRetail = (r: { channel: string }) => RETAIL.has(r.channel);
+  const inSelection = (r: { channel: string }) => selected.has(r.channel);
 
-  // ---- headline numbers for the chosen range ----
-  const retailRows = daily.filter(isRetail);
-  const revenue = retailRows.reduce((s, r) => s + n(r.revenue), 0);
-  const orders = retailRows.reduce((s, r) => s + n(r.orders), 0);
-  const cookieUnits = cookies.filter(isRetail).reduce((s, r) => s + n(r.units), 0);
+  // ---- headline numbers over the selected channels ----
+  const rows = daily.filter(inSelection);
+  const revenue = rows.reduce((s, r) => s + n(r.revenue), 0);
+  const orders = rows.reduce((s, r) => s + n(r.orders), 0);
+  const cookieUnits = cookies.filter(inSelection).reduce((s, r) => s + n(r.units), 0);
 
-  const nonRetail: Record<string, number> = {};
+  // Every channel present in the range, so the filter chips can show what each
+  // is worth even while it's switched off.
+  const byChannel: Record<string, { revenue: number; orders: number }> = {};
   for (const r of daily) {
-    if (isRetail(r)) continue;
-    nonRetail[r.channel] = (nonRetail[r.channel] || 0) + n(r.revenue);
+    const c = (byChannel[r.channel] ??= { revenue: 0, orders: 0 });
+    c.revenue += n(r.revenue);
+    c.orders += n(r.orders);
   }
 
   const perLoc = new Map<number, { revenue: number; orders: number }>();
-  for (const r of retailRows) {
+  for (const r of rows) {
     const cur = perLoc.get(r.location_id) ?? { revenue: 0, orders: 0 };
     cur.revenue += n(r.revenue);
     cur.orders += n(r.orders);
@@ -69,6 +79,7 @@ export async function GET(req: Request) {
   const byMonth = spanDays > 92;
   const series = new Map<string, Record<string, number>>();
   for (const r of daily) {
+    if (!inSelection(r)) continue;
     const k = byMonth ? r.business_date.slice(0, 7) : r.business_date;
     if (!series.has(k)) series.set(k, {});
     const row = series.get(k)!;
@@ -143,6 +154,8 @@ export async function GET(req: Request) {
     crossesTocumenOpening: from < TOCUMEN_OPENED && to >= TOCUMEN_OPENED,
     tocumenOpened: TOCUMEN_OPENED,
     locations,
+    channels: { selected: [...selected], all: ALL_CHANNELS, byChannel,
+                skewsTicket: [...selected].filter((c) => SKEWS_TICKET.has(c)) },
     kpis: {
       revenue,
       orders,
@@ -157,7 +170,6 @@ export async function GET(req: Request) {
           avgTicket: v?.orders ? v.revenue / v.orders : 0,
         };
       }),
-      nonRetail,
     },
     timeline,
     specials: specials.slice().sort((a, b) => b.share - a.share),

@@ -4,21 +4,21 @@ import { useEffect, useState } from 'react';
 import Nav, { type View } from '@/components/Nav';
 
 const T = {
-  '--tv-bg': '#1E110D', '--tv-panel': '#2B1811', '--tv-panel2': '#251510',
-  '--tv-ink': '#FEF4E7', '--tv-ink2': '#DBC8B6', '--tv-ink3': '#B3A08F',
-  '--tv-ink4': '#8A7565', '--tv-ink5': '#6E5A4C',
-  '--tv-line': 'rgba(219,200,182,0.14)', '--tv-track': 'rgba(219,200,182,0.10)',
-  '--tv-accent': '#C98B4B', '--tv-pos': '#93B36A', '--tv-neg': '#C4694A',
+  '--tv-bg': '#EDDECD', '--tv-panel': '#FEF4E7', '--tv-panel2': '#F6E8D6',
+  '--tv-ink': '#3C2017', '--tv-ink2': '#3C2017', '--tv-ink3': 'rgba(60,32,23,0.62)',
+  '--tv-ink4': 'rgba(60,32,23,0.55)', '--tv-ink5': 'rgba(60,32,23,0.38)',
+  '--tv-line': 'rgba(60,32,23,0.16)', '--tv-track': 'rgba(60,32,23,0.08)',
+  '--tv-accent': '#A9701F', '--tv-pos': '#4A6B3A', '--tv-neg': '#A83E1E',
 } as React.CSSProperties;
 
 /** Channel colours, assigned in fixed order and never cycled. */
 const CHANNEL: Record<string, { label: string; color: string }> = {
-  walk_in:      { label: 'Walk-in',      color: '#B86A33' },
-  marketplace:  { label: 'Marketplace',  color: '#159FAF' },
-  clau:         { label: 'Clau',         color: '#D2325A' },
-  wholesale:    { label: 'Wholesale',    color: '#849C28' },
-  eventos:      { label: 'Events',       color: '#A868CC' },
-  unclassified: { label: 'Unclassified', color: '#7A6555' },
+  walk_in:      { label: 'Walk-in',      color: '#8A4B1E' },
+  marketplace:  { label: 'Marketplace',  color: '#0091A6' },
+  clau:         { label: 'Clau',         color: '#B01049' },
+  wholesale:    { label: 'Wholesale',    color: '#7A8F1E' },
+  eventos:      { label: 'Events',       color: '#8E3AAF' },
+  unclassified: { label: 'Unclassified', color: '#A6917F' },
 };
 const ORDER = ['walk_in', 'marketplace', 'clau', 'wholesale', 'eventos', 'unclassified'];
 
@@ -31,10 +31,13 @@ type Data = {
   range: { from: string; to: string; days: number; grouping: string };
   crossesTocumenOpening: boolean;
   tocumenOpened: string;
+  channels: {
+    selected: string[]; all: string[]; skewsTicket: string[];
+    byChannel: Record<string, { revenue: number; orders: number }>;
+  };
   kpis: {
     revenue: number; orders: number; cookieUnits: number; avgTicket: number;
     byLocation: { id: number; name: string; revenue: number; orders: number; avgTicket: number }[];
-    nonRetail: Record<string, number>;
   };
   timeline: { period: string; channels: Record<string, number>; total: number }[];
   specials: Special[];
@@ -78,18 +81,23 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
   const [custom, setCustom] = useState<[string, string] | null>(null);
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
+  const [channels, setChannels] = useState<string[]>(ORDER);
 
   const [from, to] = custom ?? PRESETS.find((p) => p.id === preset)!.range();
+  const chanParam = channels.join(',');
+
+  const toggle = (c: string) =>
+    setChannels((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetch(`/api/analysis?from=${from}&to=${to}`, { cache: 'no-store' })
+    fetch(`/api/analysis?from=${from}&to=${to}&channels=${chanParam}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => { if (alive) { setData(d); setLoading(false); } })
       .catch(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [from, to]);
+  }, [from, to, chanParam]);
 
   const page: React.CSSProperties = {
     ...T, minHeight: '100vh', background: 'var(--tv-bg)', color: 'var(--tv-ink)',
@@ -119,8 +127,8 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
               <button key={p.id} onClick={() => { setCustom(null); setPreset(p.id); }}
                 style={{ padding: '8px 13px', borderRadius: 999, fontSize: 13.5, cursor: 'pointer',
                          border: '1px solid ' + (on ? 'transparent' : 'var(--tv-line)'),
-                         background: on ? 'var(--tv-ink2)' : 'transparent',
-                         color: on ? '#1E110D' : 'var(--tv-ink3)',
+                         background: on ? 'var(--tv-ink)' : 'transparent',
+                         color: on ? 'var(--tv-panel)' : 'var(--tv-ink3)',
                          fontWeight: on ? 600 : 400, fontFamily: 'inherit',
                          transition: 'transform 100ms cubic-bezier(.32,.72,0,1)' }}
                 onPointerDown={(e) => (e.currentTarget.style.transform = 'scale(0.96)')}
@@ -143,6 +151,35 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
           {longDate(from)} → {longDate(to)}{data ? ` · ${data.range.days} days` : ''}
         </div>
 
+        {/* Which order types count. Everything below follows this. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center' }}>
+          {ORDER.filter((c) => data?.channels.byChannel[c]).map((c) => {
+            const on = channels.includes(c);
+            const v = data!.channels.byChannel[c];
+            return (
+              <button key={c} onClick={() => toggle(c)}
+                style={{ display: 'flex', alignItems: 'center', gap: 8,
+                         padding: '7px 13px', borderRadius: 999, fontSize: 13, cursor: 'pointer',
+                         border: '1px solid ' + (on ? 'transparent' : 'var(--tv-line)'),
+                         background: on ? 'var(--tv-panel2)' : 'transparent',
+                         color: on ? 'var(--tv-ink)' : 'var(--tv-ink5)',
+                         fontFamily: 'inherit', opacity: on ? 1 : .7 }}>
+                <i style={{ width: 10, height: 10, borderRadius: 3,
+                            background: on ? CHANNEL[c].color : 'transparent',
+                            border: '1px solid ' + CHANNEL[c].color }} />
+                {CHANNEL[c].label}
+                <span style={{ color: 'var(--tv-ink5)' }}>{money(v.revenue)}</span>
+              </button>
+            );
+          })}
+          {data && channels.length < ORDER.filter((c) => data.channels.byChannel[c]).length && (
+            <button onClick={() => setChannels(ORDER)}
+              style={{ padding: '7px 13px', borderRadius: 999, fontSize: 13, cursor: 'pointer',
+                       border: 0, background: 'transparent', color: 'var(--tv-accent)',
+                       fontFamily: 'inherit' }}>Select all</button>
+          )}
+        </div>
+
         {loading && !data && <div style={{ ...card, ...sub }}>Loading…</div>}
         {data?.error && <div style={{ ...card, color: 'var(--tv-accent)' }}>{data.error}</div>}
 
@@ -159,10 +196,15 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
 
             <div style={{ display: 'grid', gap: 12,
                           gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))' }}>
-              <Kpi label="Retail revenue" value={money(data.kpis.revenue)} />
+              <Kpi label="Revenue" value={money(data.kpis.revenue)}
+                   note={channels.length === ORDER.length ? 'All channels'
+                     : channels.map((c) => CHANNEL[c]?.label).filter(Boolean).join(' · ')} />
               <Kpi label="Orders" value={num(data.kpis.orders)} />
-              <Kpi label="Average ticket" value={money2(data.kpis.avgTicket)} />
-              <Kpi label="Cookies" value={num(data.kpis.cookieUnits)} />
+              <Kpi label="Average ticket" value={money2(data.kpis.avgTicket)}
+                   note={data.channels.skewsTicket.length
+                     ? `Skewed by ${data.channels.skewsTicket.map((c) => CHANNEL[c].label).join(' and ')}`
+                     : undefined} />
+              <Kpi label="Cookies" value={num(data.kpis.cookieUnits)} note="Units sold" />
             </div>
 
             <div style={{ display: 'grid', gap: 12,
@@ -177,19 +219,7 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
                   </div>
                 </div>
               ))}
-              {Object.keys(data.kpis.nonRetail).length > 0 && (
-                <div style={{ ...card, background: 'var(--tv-panel2)' }}>
-                  <div style={{ fontSize: 16, fontWeight: 600 }}>Outside retail</div>
-                  <div style={{ display: 'flex', gap: 22, marginTop: 10, flexWrap: 'wrap' }}>
-                    {Object.entries(data.kpis.nonRetail).map(([c, v]) => (
-                      <Mini key={c} label={CHANNEL[c]?.label ?? c} value={money(v)} />
-                    ))}
-                  </div>
-                  <div style={{ ...sub, marginTop: 10 }}>
-                    Invoiced. Never counted into average ticket or the hourly curve.
-                  </div>
-                </div>
-              )}
+
             </div>
 
             <div style={card}>
@@ -237,16 +267,17 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
 
 const dateInput: React.CSSProperties = {
   background: 'var(--tv-panel)', color: 'var(--tv-ink2)', border: '1px solid var(--tv-line)',
-  borderRadius: 9, padding: '7px 10px', fontSize: 13, fontFamily: 'inherit', colorScheme: 'dark',
+  borderRadius: 9, padding: '7px 10px', fontSize: 13, fontFamily: 'inherit', colorScheme: 'light',
 };
 
-function Kpi({ label, value }: { label: string; value: string }) {
+function Kpi({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div style={{ background: 'var(--tv-panel)', borderRadius: 18, padding: '18px 20px' }}>
       <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.12em',
                     textTransform: 'uppercase', color: 'var(--tv-ink3)' }}>{label}</div>
-      <div style={{ fontSize: 'clamp(25px, 4.2vw, 33px)', fontWeight: 700,
+      <div style={{ fontSize: 'clamp(24px, 3.6vw, 30px)', fontWeight: 700,
                     letterSpacing: '-.022em', marginTop: 6 }}>{value}</div>
+      {note && <div style={{ fontSize: 12, color: 'var(--tv-ink5)', marginTop: 4 }}>{note}</div>}
     </div>
   );
 }
@@ -321,7 +352,7 @@ function Specials({ rows, scaleTo, plain }: {
           <div style={{ height: 9, borderRadius: 4, background: 'var(--tv-track)' }}>
             <div style={{ height: 9, borderRadius: 4, width: `${(r.share / max) * 100}%`,
                           background: r.current ? 'var(--tv-accent)'
-                            : r.preTocumen ? 'rgba(219,200,182,0.34)' : 'var(--tv-ink2)' }} />
+                            : r.preTocumen ? 'rgba(60,32,23,0.28)' : 'var(--tv-ink2)' }} />
           </div>
           {!plain && r.categoryGrowth !== null && !r.current && (
             <div style={{ fontSize: 12.5, marginTop: 5,

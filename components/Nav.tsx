@@ -37,30 +37,30 @@ export default function Nav({ view, onSelect, size = 44 }: {
       {open && (
         <>
           <div onClick={() => setOpen(false)}
-               style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'rgba(30,17,13,0.55)' }} />
+               style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'rgba(30,17,13,0.35)' }} />
           <div style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, zIndex: 49,
                         minWidth: 258, borderRadius: 18, padding: 8,
-                        background: 'rgba(43,24,17,0.94)',
+                        background: 'var(--tv-panel, rgba(43,24,17,0.94))',
                         backdropFilter: 'blur(20px) saturate(180%)',
                         WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-                        border: '1px solid rgba(219,200,182,0.14)',
-                        boxShadow: '0 20px 48px -20px rgba(0,0,0,.7)', textAlign: 'left',
+                        border: '1px solid var(--tv-line, rgba(219,200,182,0.14))',
+                        boxShadow: '0 20px 48px -20px rgba(0,0,0,.35)', textAlign: 'left',
                         fontFamily: '-apple-system,BlinkMacSystemFont,system-ui,sans-serif' }}>
             {PAGES.map((p) => (
               <button key={p.id} onClick={() => { onSelect(p.id); setOpen(false); }}
                 style={{ display: 'block', width: '100%', textAlign: 'left', border: 0,
                          padding: '13px 16px', borderRadius: 12, fontSize: 16, cursor: 'pointer',
                          fontFamily: 'inherit', letterSpacing: 0, textTransform: 'none',
-                         color: view === p.id ? '#FEF4E7' : '#B3A08F',
+                         color: view === p.id ? 'var(--tv-ink, #FEF4E7)' : 'var(--tv-ink3, #B3A08F)',
                          fontWeight: view === p.id ? 600 : 400,
-                         background: view === p.id ? 'rgba(219,200,182,0.10)' : 'transparent' }}>
+                         background: view === p.id ? 'var(--tv-panel2, rgba(219,200,182,0.10))' : 'transparent' }}>
                 {p.label}
               </button>
             ))}
-            <div style={{ height: 1, background: 'rgba(219,200,182,0.14)', margin: '8px 12px' }} />
+            <div style={{ height: 1, background: 'var(--tv-line, rgba(219,200,182,0.14))', margin: '8px 12px' }} />
             <a href="/api/logout"
                style={{ display: 'block', padding: '13px 16px', borderRadius: 12, fontSize: 16,
-                        color: '#8A7565', textDecoration: 'none', letterSpacing: 0,
+                        color: 'var(--tv-ink4, #8A7565)', textDecoration: 'none', letterSpacing: 0,
                         textTransform: 'none', fontWeight: 400 }}>Sign out</a>
           </div>
         </>
