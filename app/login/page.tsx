@@ -21,7 +21,11 @@ export default function Login() {
         body: JSON.stringify({ pin: code }),
       });
       if (!r.ok) { setErr((await r.json()).error ?? 'Incorrect code'); setPin(''); return; }
-      window.location.href = new URLSearchParams(window.location.search).get('next') || '/tv';
+      // Everything lives at '/' now. Ignore stale '/tv' links and anything
+      // off-site — a redirect target from the query string is untrusted input.
+      const next = new URLSearchParams(window.location.search).get('next') ?? '';
+      const safe = next.startsWith('/') && !next.startsWith('//') && next !== '/tv' ? next : '/';
+      window.location.href = safe;
     } catch { setErr('Offline'); setPin(''); }
     finally { setBusy(false); }
   }, []);
