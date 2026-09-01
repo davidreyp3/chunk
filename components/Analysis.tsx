@@ -135,9 +135,15 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
     <div style={page}>
       <div style={{ maxWidth: 1180, margin: '0 auto', display: 'flex',
                     flexDirection: 'column', gap: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={cap}>Analysis</div>
-          <Nav view={view} onSelect={onSelect} size={38} />
+        {/* Both sides take an equal share, so the logo sits optically centred
+            however wide the label or the menu button turn out to be. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ ...cap, flex: '1 1 0', minWidth: 0 }}>Analysis</div>
+          <img src="/logo-sublogo.svg" alt="Chunk Cookie Bar"
+               style={{ height: 30, flex: '0 0 auto' }} />
+          <div style={{ flex: '1 1 0', display: 'flex', justifyContent: 'flex-end' }}>
+            <Nav view={view} onSelect={onSelect} size={38} />
+          </div>
         </div>
 
         {/* One range control, driving every panel below it. */}
