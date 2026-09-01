@@ -1,0 +1,161 @@
+/* Chunk Cookie Bar — design tokens.
+   Brand values verified from the official brand files. Never substitute.
+   Brown #351C15 = PANTONE 476 C.  Cream #FFEFCE = PANTONE P 10-1 C.
+
+   Typography is the platform system font — SF Pro on Apple devices, which
+   switches between Display and Text cuts automatically. No webfont, no
+   external request. */
+
+:root {
+  /* ---- BRAND (verified) ---- */
+  --chunk-brown: #351C15;
+  --chunk-cream: #FFEFCE;
+  --neutral-1: #FDF4E9; --neutral-2: #EDE0D0; --neutral-3: #CBBCAA;
+  --neutral-4: #A6917F; --neutral-5: #503B30; --neutral-6: #3C2017;
+
+  /* ---- SURFACES & INK ---- */
+  --ground: #FDF4E9;
+  --surface: #FFFBF5;
+  --surface-accent: #FFEFCE;
+  --hairline: rgba(53,28,21,.09);      /* table rules only — not panel outlines */
+  --ink: #351C15;
+  --ink-secondary: #5F4636;
+  --ink-muted: #8A7663;
+  --accent: #8A4B1E;
+  --accent-contrast: #FDF4E9;
+
+  /* ---- STATUS (reserved — never a chart series) ---- */
+  --status-good: #2F7D4F; --status-bad: #A32E1E;
+  --status-warn: #8A6A12; --status-flat: #8A7663;
+  --status-good-bg: #E4EFE6; --status-bad-bg: #F6E1DC; --status-warn-bg: #F3EAD3;
+
+  /* ---- CHART ---- */
+  --cat-1: #8A4B1E; --cat-2: #0091A6; --cat-3: #B01049; --cat-4: #7A8F1E;
+  --cat-5: #2F53C4; --cat-6: #D96A1F; --cat-7: #8E3AAF; --cat-8: #A67800;
+  --cat-other: #A6917F;
+  --seq-1: #F6E6CC; --seq-2: #E3C69C; --seq-3: #C99C68;
+  --seq-4: #A9743F; --seq-5: #7E4F26; --seq-6: #351C15;
+  --div-neg: #A32E1E; --div-neg-soft: #C97A5E; --div-mid: #CBBCAA;
+  --div-pos-soft: #5AA9B5; --div-pos: #0091A6;
+  --grid-line: rgba(53,28,21,.09);
+  --axis-text: #8A7663;
+
+  /* ---- TYPE: one family, hierarchy from weight + size + tracking ---- */
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+             system-ui, "Segoe UI", Inter, Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Tracking is SIZE-SPECIFIC. Large text tightens, small text loosens.
+     A single letter-spacing value is wrong somewhere by definition. */
+  --text-hero: 64px;  --track-hero: -0.030em;  --lead-hero: 1.02;
+  --text-3xl: 40px;   --track-3xl:  -0.022em;  --lead-3xl:  1.08;
+  --text-2xl: 30px;   --track-2xl:  -0.016em;  --lead-2xl:  1.15;
+  --text-xl:  24px;   --track-xl:   -0.011em;  --lead-xl:   1.25;
+  --text-lg:  19px;   --track-lg:   -0.005em;  --lead-lg:   1.45;
+  --text-base:16px;   --track-base:  0;        --lead-base: 1.55;
+  --text-sm:  14px;   --track-sm:    0.005em;  --lead-sm:   1.50;
+  --text-xs:  12px;   --track-xs:    0.010em;  --lead-xs:   1.40;
+
+  /* Wall display (1920x1080 read at 3-4 m). Nothing under 28px is legible. */
+  --tv-figure: 130px; --track-tv: -0.035em;
+  --tv-value: 48px; --tv-body: 30px; --tv-label: 28px;
+
+  /* ---- ELEVATION: space and shadow, not strokes ---- */
+  --shadow-1: 0 1px 2px rgba(53,28,21,.04), 0 4px 14px -8px rgba(53,28,21,.12);
+  --shadow-2: 0 2px 6px rgba(53,28,21,.05), 0 20px 48px -20px rgba(53,28,21,.20);
+  --radius-sm: 8px; --radius: 14px; --radius-lg: 20px; --radius-pill: 999px;
+
+  /* ---- MATERIAL: floating chrome only (the filter bar) ---- */
+  --material: rgba(255,251,245,.72);
+  --material-blur: blur(20px) saturate(180%);
+  --material-edge: rgba(255,255,255,.5);
+  --scrim: rgba(53,28,21,.30);
+
+  /* ---- MOTION: springs, not durations. Anything touchable gets a spring. ----
+     Default UI       damping 1.0  response 0.35s   (no overshoot)
+     Sheet / drawer   damping 0.8  response 0.30s
+     Drag release     damping 0.8  response 0.40s   (only after momentum) */
+  --dur-press: 100ms;
+  --ease-out: cubic-bezier(.32,.72,0,1);
+  --spring-ui-bounce: 0;    --spring-ui-duration: .35s;
+  --spring-sheet-bounce: .2; --spring-sheet-duration: .30s;
+  --spring-fling-bounce: .2; --spring-fling-duration: .40s;
+
+  /* ---- SPACE ---- */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
+}
+
+/* Dark — re-stepped for a dark ground, not an inversion.
+   Brand cream becomes the ink on a brand brown ground, as the packaging does. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #241109; --surface: #33190F; --surface-accent: #402015;
+    --hairline: rgba(255,239,206,.10);
+    --ink: #FFEFCE; --ink-secondary: #D8C3A6; --ink-muted: #A6917F;
+    --accent: #D08A50; --accent-contrast: #241109;
+    --status-good: #5FA877; --status-bad: #D9705C; --status-warn: #C0992F; --status-flat: #A6917F;
+    --status-good-bg: #23331F; --status-bad-bg: #3A1C16; --status-warn-bg: #35270F;
+    --cat-1: #B86A33; --cat-2: #159FAF; --cat-3: #D2325A; --cat-4: #849C28;
+    --cat-5: #5279E0; --cat-6: #D67A2F; --cat-7: #A868CC; --cat-8: #B58F22;
+    --cat-other: #7A6555;
+    --seq-1: #4A2C1C; --seq-2: #6B4227; --seq-3: #8E5C33;
+    --seq-4: #B27C48; --seq-5: #D3A473; --seq-6: #F0D4AE;
+    --grid-line: rgba(255,239,206,.10); --axis-text: #A6917F;
+    --material: rgba(51,25,15,.68); --material-edge: rgba(255,239,206,.10);
+    --scrim: rgba(0,0,0,.45);
+    --shadow-1: 0 1px 2px rgba(0,0,0,.30), 0 4px 14px -8px rgba(0,0,0,.50);
+    --shadow-2: 0 2px 6px rgba(0,0,0,.35), 0 20px 48px -20px rgba(0,0,0,.65);
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #241109; --surface: #33190F; --surface-accent: #402015;
+  --hairline: rgba(255,239,206,.10);
+  --ink: #FFEFCE; --ink-secondary: #D8C3A6; --ink-muted: #A6917F;
+  --accent: #D08A50; --accent-contrast: #241109;
+  --status-good: #5FA877; --status-bad: #D9705C; --status-warn: #C0992F; --status-flat: #A6917F;
+  --status-good-bg: #23331F; --status-bad-bg: #3A1C16; --status-warn-bg: #35270F;
+  --cat-1: #B86A33; --cat-2: #159FAF; --cat-3: #D2325A; --cat-4: #849C28;
+  --cat-5: #5279E0; --cat-6: #D67A2F; --cat-7: #A868CC; --cat-8: #B58F22;
+  --cat-other: #7A6555;
+  --seq-1: #4A2C1C; --seq-2: #6B4227; --seq-3: #8E5C33;
+  --seq-4: #B27C48; --seq-5: #D3A473; --seq-6: #F0D4AE;
+  --grid-line: rgba(255,239,206,.10); --axis-text: #A6917F;
+  --material: rgba(51,25,15,.68); --material-edge: rgba(255,239,206,.10);
+  --scrim: rgba(0,0,0,.45);
+  --shadow-1: 0 1px 2px rgba(0,0,0,.30), 0 4px 14px -8px rgba(0,0,0,.50);
+  --shadow-2: 0 2px 6px rgba(0,0,0,.35), 0 20px 48px -20px rgba(0,0,0,.65);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--lead-base);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Floating chrome — the date-range filter bar. Content scrolls underneath. */
+.ds-material {
+  background: var(--material);
+  backdrop-filter: var(--material-blur);
+  -webkit-backdrop-filter: var(--material-blur);
+  border-top: 1px solid var(--material-edge);
+}
+
+/* Accessibility: reduced motion means gentler, not absent. */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .ds-material { background: var(--surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+@media (prefers-contrast: more) {
+  :root { --hairline: rgba(53,28,21,.35); }
+  .ds-material { background: var(--surface); backdrop-filter: none; }
+}
