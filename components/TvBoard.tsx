@@ -148,6 +148,10 @@ export default function TvBoard() {
 
   const { total, month, special } = data;
   const peak = Math.max(...data.hours.map((h) => Math.max(h.today, h.typical)), 1);
+  const step = peak <= 50 ? 10 : peak <= 100 ? 20 : peak <= 250 ? 50 : peak <= 500 ? 100 : 200;
+  const top = Math.ceil(peak / step) * step;
+  const ticks = Array.from({ length: Math.floor(top / step) }, (_, i) => (i + 1) * step);
+  const busiest = data.hours.reduce((a, b) => (b.today > a.today ? b : a), data.hours[0]);
   const pos = (v: number | null) => v != null && v >= 0;
   const pct = month.target ? (month.mtd / month.target) * 100 : null;
   const openLocs = data.locations.filter((l) => l.open);
@@ -249,7 +253,7 @@ export default function TvBoard() {
       <div style={{ display: 'flex', gap: 16, flex: 'none' }}>
         <div style={{ ...panel, flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-            <div style={L}>Transactions per hour</div>
+            <div style={L}>Revenue per hour</div>
             <div style={{ display: 'flex', gap: 26, fontSize: 25, color: 'var(--tv-ink4)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ width: 22, height: 14, borderRadius: 3, background: 'var(--tv-bar)' }} />Today</div>
@@ -258,21 +262,51 @@ export default function TvBoard() {
                 typical {weekday(data.day)}</div>
             </div>
           </div>
-          <div style={{ height: 116, display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 10 }}>
-            {data.hours.map((h) => (
-              <div key={h.hour} style={{ flex: 1, display: 'flex', flexDirection: 'column',
-                                         alignItems: 'center', gap: 12 }}>
-                <div style={{ width: '100%', height: 84, position: 'relative' }}>
-                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0,
-                                height: Math.max(4, (h.typical / peak) * 84),
-                                background: 'var(--tv-ghost)', borderRadius: 5 }} />
-                  <div style={{ position: 'absolute', bottom: 0, left: '24%', width: '52%',
-                                height: Math.max(h.today ? 4 : 0, (h.today / peak) * 84),
-                                background: 'var(--tv-bar)', borderRadius: 5 }} />
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 12, marginTop: 10 }}>
+            <div style={{ width: 74, flex: 'none', position: 'relative', paddingBottom: 33 }}>
+              {ticks.map((t) => (
+                <div key={t} style={{ position: 'absolute', right: 0, bottom: `${(t / top) * 100}%`,
+                                      transform: 'translateY(50%)', fontSize: 21,
+                                      color: 'var(--tv-ink5)' }}>{money(t)}</div>
+              ))}
+            </div>
+
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+                {ticks.map((t) => (
+                  <div key={t} style={{ position: 'absolute', left: 0, right: 0,
+                                        bottom: `${(t / top) * 100}%`, height: 1,
+                                        background: 'var(--tv-line)' }} />
+                ))}
+                <div style={{ position: 'absolute', inset: 0, display: 'flex',
+                              alignItems: 'flex-end', gap: 10 }}>
+                  {data.hours.map((h) => (
+                    <div key={h.hour} style={{ flex: 1, height: '100%', position: 'relative' }}>
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0,
+                                    height: `${Math.max(1, (h.typical / top) * 100)}%`,
+                                    background: 'var(--tv-ghost)', borderRadius: 5 }} />
+                      <div style={{ position: 'absolute', bottom: 0, left: '24%', width: '52%',
+                                    height: `${h.today ? Math.max(1, (h.today / top) * 100) : 0}%`,
+                                    background: 'var(--tv-bar)', borderRadius: 5 }} />
+                      {h.hour === busiest.hour && h.today > 0 && (
+                        <div style={{ position: 'absolute', left: 0, right: 0,
+                                      bottom: `calc(${(h.today / top) * 100}% + 6px)`,
+                                      textAlign: 'center', fontSize: 23, fontWeight: 600,
+                                      color: 'var(--tv-ink)' }}>{money(h.today)}</div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                <div style={{ fontSize: 25, color: h.today ? 'var(--tv-ink4)' : 'var(--tv-ink5)' }}>{h.hour}</div>
               </div>
-            ))}
+              <div style={{ display: 'flex', gap: 10, marginTop: 8, flex: 'none' }}>
+                {data.hours.map((h) => (
+                  <div key={h.hour} style={{ flex: 1, textAlign: 'center', fontSize: 25,
+                                             color: h.today ? 'var(--tv-ink4)' : 'var(--tv-ink5)' }}>
+                    {h.hour}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -432,6 +466,10 @@ function Phone({ data, vars, err, onToggle }: {
   const pos = (v: number | null) => v != null && v >= 0;
   const pct = month.target ? (month.mtd / month.target) * 100 : null;
   const peak = Math.max(...data.hours.map((h) => Math.max(h.today, h.typical)), 1);
+  const step = peak <= 50 ? 10 : peak <= 100 ? 20 : peak <= 250 ? 50 : peak <= 500 ? 100 : 200;
+  const top = Math.ceil(peak / step) * step;
+  const ticks = Array.from({ length: Math.floor(top / step) }, (_, i) => (i + 1) * step);
+  const busiest = data.hours.reduce((a, b) => (b.today > a.today ? b : a), data.hours[0]);
 
   const page: React.CSSProperties = {
     ...vars, minHeight: '100vh', background: 'var(--tv-bg)', color: 'var(--tv-ink)',
@@ -493,7 +531,7 @@ function Phone({ data, vars, err, onToggle }: {
       ))}
 
       <div style={card}>
-        <div style={cap}>Transactions per hour</div>
+        <div style={cap}>Revenue per hour</div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 96, marginTop: 14 }}>
           {data.hours.map((h) => (
             <div key={h.hour} style={{ flex: 1, display: 'flex', flexDirection: 'column',

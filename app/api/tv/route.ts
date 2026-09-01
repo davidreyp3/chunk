@@ -45,11 +45,11 @@ export async function GET(req: Request) {
     };
   });
 
-  // Transactions per hour — today against the same weekday's recent average.
+  // Revenue per hour — today against the same weekday's recent average.
   const hours = Array.from({ length: 18 }, (_, i) => i + 5).map((h) => {
-    const today = d.todayRows.filter((r) => retail(r) && r.hour_of_day === h).length;
+    const today = sum(d.todayRows.filter((r) => retail(r) && r.hour_of_day === h));
     const perDay = d.priors.map((day) =>
-      d.priorRows.filter((r) => r.business_date === day && retail(r) && r.hour_of_day === h).length);
+      sum(d.priorRows.filter((r) => r.business_date === day && retail(r) && r.hour_of_day === h)));
     const seen = perDay.filter((v) => v > 0);
     return { hour: h, today, typical: seen.length ? seen.reduce((a, b) => a + b, 0) / seen.length : 0 };
   });
