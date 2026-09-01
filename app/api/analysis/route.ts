@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { select, rpc } from '@/lib/db';
 import { businessToday } from '@/lib/panama';
+import { resolveFlavour } from '@/lib/normalize';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -157,8 +158,9 @@ export async function GET(req: Request) {
   const specials = months
     .filter((m) => specialFor.has(m))
     .map((m) => {
-      const flavour = specialFor.get(m)!;
-      const units = monthFlavour.get(m)?.get(flavour) ?? 0;
+      const sold = monthFlavour.get(m);
+      const flavour = resolveFlavour(specialFor.get(m)!, sold?.keys() ?? []);
+      const units = sold?.get(flavour) ?? 0;
       const total = monthTotals.get(m) || 1;
       const prevMonth = months[months.indexOf(m) - 1];
       const prevTotal = prevMonth ? monthTotals.get(prevMonth) ?? 0 : 0;

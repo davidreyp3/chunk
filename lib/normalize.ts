@@ -75,3 +75,17 @@ export function normalize(o: any, locationId: number, channels: Map<string, Chan
 
   return { order, lines, mods, pays, clientRow };
 }
+
+/** Accents and case removed, for matching a name typed by hand against the
+ *  spelling the POS uses. The calendar said "Tiramisu" while every line said
+ *  "Tiramisù", so the September special read zero. Display always uses the
+ *  POS spelling — this is only ever for finding the match. */
+export const foldName = (s: string) =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+/** The sold flavour matching `planned`, preferring an exact hit. */
+export function resolveFlavour(planned: string, sold: Iterable<string>): string {
+  const names = [...sold];
+  if (names.includes(planned)) return planned;
+  return names.find((n) => foldName(n) === foldName(planned)) ?? planned;
+}

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { refreshToday } from '@/lib/refresh';
 import { loadTv, inferMonthlySpecial, retail, live, type OrderRow } from '@/lib/tvdata';
 import { panamaHour } from '@/lib/panama';
+import { resolveFlavour } from '@/lib/normalize';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -71,7 +72,7 @@ export async function GET(req: Request) {
   const inferred = inferMonthlySpecial(d.flavourMonths, d.ym);
   // The calendar is the source of truth; inference is the fallback for months
   // nobody recorded. That's what lets the panel say "0" instead of nothing.
-  const flavour = d.calendar[0]?.flavour ?? inferred.current?.flavour ?? null;
+  const planned = d.calendar[0]?.flavour ?? inferred.current?.flavour ?? null;
   const monthUnits = new Map<string, number>();
   let monthCookies = 0;
   for (const r of d.flavourMonths) {
@@ -80,6 +81,8 @@ export async function GET(req: Request) {
     monthUnits.set(r.flavour, (monthUnits.get(r.flavour) || 0) + u);
     monthCookies += u;
   }
+  // Match the calendar spelling to the one the POS actually uses.
+  const flavour = planned ? resolveFlavour(planned, monthUnits.keys()) : null;
   const special = {
     ...inferred,
     current: flavour ? { flavour, pct: 0 } : null,
