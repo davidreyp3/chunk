@@ -1,17 +1,9 @@
 import { NextResponse } from 'next/server';
-import { select } from '@/lib/db';
 import { refreshToday } from '@/lib/refresh';
-import { businessToday, priorSameWeekdays } from '@/lib/panama';
+import { loadTv, inferMonthlySpecial, retail, live, type OrderRow } from '@/lib/tvdata';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
-
-type OrderRow = {
-  location_id: number; hour_of_day: number; total: string | number;
-  channel: string; status: string | null; business_date: string;
-};
-
-const RETAIL = new Set(['walk_in', 'marketplace', 'clau']);
 
 const REQUIRED = [
   'SUPABASE_URL', 'SUPABASE_SECRET_KEY',
@@ -19,111 +11,112 @@ const REQUIRED = [
   'INVU_SUNSET_USER', 'INVU_SUNSET_PASS',
 ] as const;
 
+const json = (body: any) =>
+  NextResponse.json(body, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+
 export async function GET(req: Request) {
   // A wall display should say WHY it's blank, not just go dark.
   const missing = REQUIRED.filter((k) => !process.env[k]);
-  if (missing.length) {
-    return NextResponse.json(
-      { error: `Faltan variables de entorno: ${missing.join(', ')}`, missing },
-      { status: 200, headers: { 'Cache-Control': 'no-store' } },
-    );
-  }
+  if (missing.length) return json({ error: `Faltan variables de entorno: ${missing.join(', ')}` });
 
   const backfill = new URL(req.url).searchParams.get('backfill') === '1';
-
   let refresh: any = null;
-  try {
-    refresh = await refreshToday(backfill);
-  } catch (e: any) {
-    refresh = { error: e.message };   // stale data beats a blank wall display
-  }
+  try { refresh = await refreshToday(backfill); } catch (e: any) { refresh = { error: e.message }; }
 
-  const today = businessToday();
-  const priors = priorSameWeekdays(today, 4);
+  let d: Awaited<ReturnType<typeof loadTv>>;
+  try { d = await loadTv(); }
+  catch (e: any) { return json({ error: `Base de datos: ${e.message}`.slice(0, 300) }); }
 
-  let locations: { id: number; name: string }[] = [];
-  let todayRows: OrderRow[] = [], priorRows: OrderRow[] = [];
-  let cookies: { location_id: number; flavour: string; units: string | number; counts_as_retail: boolean }[] = [];
-  try {
-    [locations, todayRows, priorRows, cookies] = await Promise.all([
-      select<{ id: number; name: string }>('locations?select=id,name&active=is.true&order=id'),
-      select<OrderRow>(`orders?select=location_id,hour_of_day,total,channel,status,business_date&business_date=eq.${today}`),
-      select<OrderRow>(`orders?select=location_id,hour_of_day,total,channel,status,business_date&business_date=in.(${priors.join(',')})`),
-      select<{ location_id: number; flavour: string; units: string | number; counts_as_retail: boolean }>(
-        `v_cookie_units?select=location_id,flavour,units,counts_as_retail&business_date=eq.${today}`),
-    ]);
-  } catch (e: any) {
-    return NextResponse.json(
-      { error: `Base de datos: ${e.message}`.slice(0, 300) },
-      { status: 200, headers: { 'Cache-Control': 'no-store' } },
-    );
-  }
+  const sum = (rows: OrderRow[]) => rows.reduce((s, r) => s + Number(r.total || 0), 0);
 
-  const live = (r: OrderRow) => r.status !== 'Nota Credito';
-  const retail = (r: OrderRow) => live(r) && RETAIL.has(r.channel);
-
-  const byLoc = locations.map((l) => {
-    const mine = todayRows.filter((r) => r.location_id === l.id && retail(r));
-    const revenue = mine.reduce((s, r) => s + Number(r.total || 0), 0);
-    const priorDays = priors.map((d) =>
-      priorRows.filter((r) => r.business_date === d && r.location_id === l.id && retail(r))
-               .reduce((s, r) => s + Number(r.total || 0), 0));
-    const seen = priorDays.filter((v) => v > 0);
+  const locations = d.locations.map((l) => {
+    const open = !!l.opened_on && l.opened_on <= d.today;
+    const mine = d.todayRows.filter((r) => r.location_id === l.id && retail(r));
+    const revenue = sum(mine);
+    const perPrior = d.priors.map((day) =>
+      sum(d.priorRows.filter((r) => r.business_date === day && r.location_id === l.id && retail(r))));
+    const seen = perPrior.filter((v) => v > 0);
     const typical = seen.length ? seen.reduce((a, b) => a + b, 0) / seen.length : 0;
     return {
-      id: l.id, name: l.name, revenue, orders: mine.length,
+      id: l.id, name: l.name, code: l.code, open,
+      revenue, orders: mine.length,
       avgTicket: mine.length ? revenue / mine.length : 0,
       typical, deltaPct: typical ? ((revenue - typical) / typical) * 100 : null,
     };
   });
 
-  const hours = Array.from({ length: 24 }, (_, h) => {
-    const t = todayRows.filter((r) => retail(r) && r.hour_of_day === h)
-                       .reduce((s, r) => s + Number(r.total || 0), 0);
-    const perDay = priors.map((d) =>
-      priorRows.filter((r) => r.business_date === d && retail(r) && r.hour_of_day === h)
-               .reduce((s, r) => s + Number(r.total || 0), 0));
+  // Transactions per hour — today against the same weekday's recent average.
+  const hours = Array.from({ length: 18 }, (_, i) => i + 5).map((h) => {
+    const today = d.todayRows.filter((r) => retail(r) && r.hour_of_day === h).length;
+    const perDay = d.priors.map((day) =>
+      d.priorRows.filter((r) => r.business_date === day && retail(r) && r.hour_of_day === h).length);
     const seen = perDay.filter((v) => v > 0);
-    return { hour: h, today: t, typical: seen.length ? seen.reduce((a, b) => a + b, 0) / seen.length : 0 };
+    return { hour: h, today, typical: seen.length ? seen.reduce((a, b) => a + b, 0) / seen.length : 0 };
   });
 
-  const flavourTotals = new Map<string, number>();
+  const flavourToday = new Map<string, number>();
   let cookieUnits = 0;
-  for (const c of cookies) {
+  for (const c of d.cookiesToday) {
     if (!c.counts_as_retail) continue;
     const u = Number(c.units || 0);
-    flavourTotals.set(c.flavour, (flavourTotals.get(c.flavour) || 0) + u);
+    flavourToday.set(c.flavour, (flavourToday.get(c.flavour) || 0) + u);
     cookieUnits += u;
   }
-  const topFlavours = [...flavourTotals.entries()]
-    .sort((a, b) => b[1] - a[1]).slice(0, 5)
-    .map(([name, units]) => ({ name, units, pct: cookieUnits ? (units / cookieUnits) * 100 : 0 }));
+  const special = inferMonthlySpecial(d.flavourMonths, d.ym);
+  const topFlavours = [...flavourToday.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([name, units]) => ({
+      name, units,
+      pct: cookieUnits ? (units / cookieUnits) * 100 : 0,
+      isSpecial: name === special.current?.flavour,
+    }));
 
-  const nonRetail = todayRows.filter((r) => live(r) && !RETAIL.has(r.channel))
-                             .reduce((s, r) => s + Number(r.total || 0), 0);
+  // Month vs target uses ALL channels — a monthly goal includes wholesale.
+  const monthLive = d.monthRows.filter(live);
+  const mtd = sum(monthLive);
+  const target = d.targets.reduce((s, t) => s + Number(t.revenue_target || 0), 0) || null;
+  const daysInMonth = new Date(Number(d.ym.slice(0, 4)), Number(d.ym.slice(5, 7)), 0).getDate();
+  const dayOfMonth = Number(d.today.slice(8, 10));
 
-  const totalRevenue = byLoc.reduce((s, l) => s + l.revenue, 0);
-  const totalTypical = byLoc.reduce((s, l) => s + l.typical, 0);
+  const ticker = d.ticker.map((o) => {
+    const items = (o.order_lines || []).filter((l) => l.product_name);
+    const first = items[0];
+    const extra = items.length > 1 ? ` +${items.length - 1}` : '';
+    const loc = d.locations.find((l) => l.id === o.location_id)?.name ?? '';
+    const chan = o.channel === 'walk_in' ? '' : ` · ${o.channel}`;
+    return {
+      // PostgREST returns timestamptz in UTC — render it in Panama time.
+      time: new Date(o.closed_at).toLocaleTimeString('es-PA',
+        { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Panama' }),
+      detail: `${loc}${chan} · ${first ? first.product_name : 'venta'}${extra}`,
+      amount: Number(o.total || 0),
+    };
+  });
 
-  return NextResponse.json(
-    {
-      day: today,
-      updatedAt: new Date().toISOString(),
-      refresh,
-      total: {
-        revenue: totalRevenue,
-        typical: totalTypical,
-        deltaPct: totalTypical ? ((totalRevenue - totalTypical) / totalTypical) * 100 : null,
-        orders: byLoc.reduce((s, l) => s + l.orders, 0),
-        avgTicket: byLoc.reduce((s, l) => s + l.orders, 0)
-          ? totalRevenue / byLoc.reduce((s, l) => s + l.orders, 0) : 0,
+  return json({
+    day: d.today,
+    updatedAt: new Date().toISOString(),
+    refresh,
+    total: {
+      revenue: locations.reduce((s, l) => s + l.revenue, 0),
+      typical: locations.reduce((s, l) => s + l.typical, 0),
+      get deltaPct() {
+        return this.typical ? ((this.revenue - this.typical) / this.typical) * 100 : null;
       },
-      locations: byLoc,
-      hours,
-      cookieUnits,
-      topFlavours,
-      nonRetail,
     },
-    { headers: { 'Cache-Control': 'no-store' } },
-  );
+    locations,
+    hours,
+    cookieUnits,
+    topFlavours,
+    special: {
+      flavour: special.current?.flavour ?? null,
+      unitsToday: special.current ? flavourToday.get(special.current.flavour) ?? 0 : 0,
+      pctToday: special.current && cookieUnits
+        ? ((flavourToday.get(special.current.flavour) ?? 0) / cookieUnits) * 100 : 0,
+      monthShare: special.monthShare,
+      pastAverage: special.pastAverage,
+      pastBest: special.pastBest,
+    },
+    month: { mtd, target, dayOfMonth, daysInMonth },
+    ticker,
+  });
 }
