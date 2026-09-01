@@ -31,7 +31,7 @@ type Loc = { id: number; name: string; code: string; open: boolean;
              revenue: number; orders: number; avgTicket: number; deltaPct: number | null };
 type Payload = {
   error?: string;
-  day: string; updatedAt: string;
+  day: string; comparedDays: number; hourNow: number; updatedAt: string;
   total: { revenue: number; typical: number; deltaPct: number | null };
   locations: Loc[];
   hours: { hour: number; today: number; typical: number }[];
@@ -134,18 +134,31 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
   };
 
   if (!data || data.error) {
+    const message = data?.error ?? (err ? `Offline — ${err}` : null);
     return (
-      <div style={stage}>
-        <div style={root}>
-          <div style={{ fontSize: 34, fontWeight: 600, color: 'var(--tv-accent)', maxWidth: '80%' }}>
-            {data?.error ?? (err ? `Offline — ${err}` : 'Loading…')}
+      <div style={{ ...vars, position: 'fixed', inset: 0, background: 'var(--tv-bg)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    justifyContent: 'center', gap: 34, padding: 32, textAlign: 'center',
+                    fontFamily: '-apple-system,BlinkMacSystemFont,system-ui,sans-serif' }}>
+        <img src="/logo-sublogo-ivory.svg" alt="Chunk Cookie Bar"
+             style={{ height: 'clamp(40px, 6vw, 62px)', opacity: .95 }} />
+        {message ? (
+          <div style={{ fontSize: 'clamp(15px, 1.6vw, 22px)', color: 'var(--tv-accent)',
+                        maxWidth: '46ch', lineHeight: 1.5 }}>
+            {message}
           </div>
-        </div>
+        ) : (
+          <svg className="chunk-spinner" width="34" height="34" viewBox="0 0 34 34"
+               aria-label="Loading" role="img">
+            <circle cx="17" cy="17" r="14" fill="none" strokeWidth="2.5"
+                    stroke="var(--tv-ink)" strokeOpacity=".16" />
+            <path d="M17 3 a14 14 0 0 1 14 14" fill="none" strokeWidth="2.5"
+                  stroke="var(--tv-ink2)" strokeLinecap="round" />
+          </svg>
+        )}
       </div>
     );
   }
-
-  if (narrow) return <Phone data={data} vars={vars} err={err} onToggle={toggle} view={view} onSelect={onSelect} />;
 
   const { total, month, special } = data;
   const peak = Math.max(...data.hours.map((h) => Math.max(h.today, h.typical)), 1);
@@ -209,7 +222,8 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
               </div>
             )}
             <div style={{ fontSize: 26, lineHeight: 1.25, color: 'var(--tv-ink3)' }}>
-              vs typical {weekday(data.day)}<br />4 weeks · {money(total.typical)}
+              vs average day at {String(data.hourNow).padStart(2, '0')}:00<br />
+              {money(total.typical)} by this hour · {data.comparedDays} days
             </div>
           </div>
         </div>
@@ -261,10 +275,10 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
                 <span style={{ width: 22, height: 14, borderRadius: 3, background: 'var(--tv-bar)' }} />Today</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ width: 22, height: 14, borderRadius: 3, background: 'var(--tv-ghost)' }} />
-                typical {weekday(data.day)}</div>
+                yesterday</div>
             </div>
           </div>
-          <div style={{ height: 156, flex: 'none', display: 'flex', gap: 12, marginTop: 10 }}>
+          <div style={{ flex: 1, minHeight: 168, display: 'flex', gap: 12, marginTop: 10 }}>
             <div style={{ width: 74, flex: 'none', position: 'relative', paddingBottom: 33 }}>
               {ticks.map((t) => (
                 <div key={t} style={{ position: 'absolute', right: 0, bottom: `${(t / top) * 100}%`,
@@ -292,7 +306,7 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
                                     background: 'var(--tv-bar)', borderRadius: 5 }} />
                       {h.hour === busiest.hour && h.today > 0 && (
                         <div style={{ position: 'absolute', left: 0, right: 0,
-                                      bottom: `calc(${(h.today / top) * 100}% + 6px)`,
+                                      bottom: `min(calc(${(h.today / top) * 100}% + 8px), calc(100% - 30px))`,
                                       textAlign: 'center', fontSize: 23, fontWeight: 600,
                                       color: 'var(--tv-ink)' }}>{money(h.today)}</div>
                       )}
@@ -484,7 +498,8 @@ function Phone({ data, vars, err, onToggle, view, onSelect }: {
   const page: React.CSSProperties = {
     ...vars, minHeight: '100vh', background: 'var(--tv-bg)', color: 'var(--tv-ink)',
     fontFamily: '-apple-system,BlinkMacSystemFont,system-ui,"Helvetica Neue",Helvetica,Arial,sans-serif',
-    fontVariantNumeric: 'tabular-nums', padding: '18px 16px 32px',
+    fontVariantNumeric: 'tabular-nums',
+    padding: 'calc(18px + env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom))',
     display: 'flex', flexDirection: 'column', gap: 12,
   };
   const card: React.CSSProperties = { background: 'var(--tv-panel)', borderRadius: 18, padding: '18px 20px' };
@@ -518,7 +533,7 @@ function Phone({ data, vars, err, onToggle, view, onSelect }: {
               {pos(total.deltaPct) ? '▲' : '▼'} {Math.abs(total.deltaPct).toFixed(1)}%
             </span>
           )}
-          <span style={sub}>vs typical {weekday(data.day)} · {money(total.typical)}</span>
+          <span style={sub}>vs average day by {String(data.hourNow).padStart(2, '0')}:00 · {money(total.typical)}</span>
         </div>
       </div>
 

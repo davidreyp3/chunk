@@ -4,7 +4,7 @@ import { COOKIE, read } from '@/lib/auth';
 // Everything is gated — including the data API, so the numbers can't be read
 // by skipping the screen.
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|logo-.*\\.svg|api/auth).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.json|logo-.*\\.svg|icon-.*\\.png|apple-touch-icon.png|api/auth).*)'],
 };
 
 export async function middleware(req: NextRequest) {

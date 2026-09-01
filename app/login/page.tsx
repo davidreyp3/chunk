@@ -53,7 +53,8 @@ export default function Login() {
   return (
     <div style={{ ...T, minHeight: '100vh', background: 'var(--tv-bg)', color: 'var(--tv-ink)',
                   display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  justifyContent: 'center', gap: 26, padding: 24,
+                  justifyContent: 'center', gap: 26,
+                  padding: 'calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom))',
                   fontFamily: '-apple-system,BlinkMacSystemFont,system-ui,sans-serif' }}>
       <img src="/logo-sublogo-ivory.svg" alt="Chunk Cookie Bar" style={{ height: 48 }} />
       <div style={{ fontSize: 14, letterSpacing: '.1em', textTransform: 'uppercase',

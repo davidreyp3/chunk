@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { refreshToday } from '@/lib/refresh';
 import { loadTv, inferMonthlySpecial, retail, live, type OrderRow } from '@/lib/tvdata';
+import { panamaHour } from '@/lib/panama';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -29,14 +30,20 @@ export async function GET(req: Request) {
 
   const sum = (rows: OrderRow[]) => rows.reduce((s, r) => s + Number(r.total || 0), 0);
 
+  // Compare like with like: today so far against an average day up to this same
+  // hour. A partial day measured against a whole one reads as a crash all morning.
+  const hourNow = panamaHour();
+  const traded = (locId: number) => new Set(
+    d.priorRows.filter((r) => r.location_id === locId && retail(r)).map((r) => r.business_date),
+  ).size;
+
   const locations = d.locations.map((l) => {
     const open = !!l.opened_on && l.opened_on <= d.today;
     const mine = d.todayRows.filter((r) => r.location_id === l.id && retail(r));
     const revenue = sum(mine);
-    const perPrior = d.priors.map((day) =>
-      sum(d.priorRows.filter((r) => r.business_date === day && r.location_id === l.id && retail(r))));
-    const seen = perPrior.filter((v) => v > 0);
-    const typical = seen.length ? seen.reduce((a, b) => a + b, 0) / seen.length : 0;
+    const days = traded(l.id) || 1;
+    const typical = sum(d.priorRows.filter(
+      (r) => r.location_id === l.id && retail(r) && r.hour_of_day <= hourNow)) / days;
     return {
       id: l.id, name: l.name, code: l.code, open,
       revenue, orders: mine.length,
@@ -48,10 +55,9 @@ export async function GET(req: Request) {
   // Revenue per hour — today against the same weekday's recent average.
   const hours = Array.from({ length: 18 }, (_, i) => i + 5).map((h) => {
     const today = sum(d.todayRows.filter((r) => retail(r) && r.hour_of_day === h));
-    const perDay = d.priors.map((day) =>
-      sum(d.priorRows.filter((r) => r.business_date === day && retail(r) && r.hour_of_day === h)));
-    const seen = perDay.filter((v) => v > 0);
-    return { hour: h, today, typical: seen.length ? seen.reduce((a, b) => a + b, 0) / seen.length : 0 };
+    const dayCount = new Set(d.priorRows.filter(retail).map((r) => r.business_date)).size || 1;
+    const typical = sum(d.priorRows.filter((r) => retail(r) && r.hour_of_day === h)) / dayCount;
+    return { hour: h, today, typical };
   });
 
   const flavourToday = new Map<string, number>();
@@ -110,6 +116,8 @@ export async function GET(req: Request) {
 
   return json({
     day: d.today,
+    comparedDays: new Set(d.priorRows.filter(retail).map((r) => r.business_date)).size,
+    hourNow,
     updatedAt: new Date().toISOString(),
     refresh,
     total: {

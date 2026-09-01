@@ -19,7 +19,8 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
   return (
     <div style={{ ...T, minHeight: '100vh', background: 'var(--tv-bg)', color: 'var(--tv-ink)',
                   fontFamily: '-apple-system,BlinkMacSystemFont,system-ui,sans-serif',
-                  padding: '22px 20px 40px', display: 'flex', justifyContent: 'center' }}>
+                  padding: 'calc(22px + env(safe-area-inset-top)) 20px calc(40px + env(safe-area-inset-bottom))',
+                  display: 'flex', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ fontSize: 13, letterSpacing: '.12em', textTransform: 'uppercase',

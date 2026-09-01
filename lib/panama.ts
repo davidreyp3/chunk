@@ -16,6 +16,18 @@ export function panamaDayBounds(day: string): { fini: number; ffin: number } {
   return { fini: Math.floor(start), ffin: Math.floor(start) + 86_399 };
 }
 
+/** Current hour of the Panama business day, 0-23. */
+export function panamaHour(): number {
+  return panamaNow().getUTCHours();
+}
+
+/** The N calendar days before `day`, most recent first. */
+export function priorDays(day: string, n: number): string[] {
+  const base = Date.parse(`${day}T12:00:00-05:00`);
+  return Array.from({ length: n }, (_, i) =>
+    new Date(base - (i + 1) * 86_400_000).toISOString().slice(0, 10));
+}
+
 /** The same weekday, N weeks back. */
 export function priorSameWeekdays(day: string, weeks: number): string[] {
   const base = Date.parse(`${day}T12:00:00-05:00`);

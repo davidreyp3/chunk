@@ -1,5 +1,5 @@
 import { select } from './db';
-import { businessToday, priorSameWeekdays } from './panama';
+import { businessToday, priorDays } from './panama';
 
 export type OrderRow = {
   location_id: number; hour_of_day: number; total: string | number;
@@ -79,14 +79,14 @@ export function inferMonthlySpecial(rows: FlavourMonth[], ym: string) {
 export async function loadTv() {
   const today = businessToday();
   const ym = monthOf(today);
-  const priors = priorSameWeekdays(today, 4);
+  const window = priorDays(today, 28);
 
   const [locations, todayRows, priorRows, cookiesToday, flavourMonths, monthRows, targets, calendar, ticker] =
     await Promise.all([
       select<{ id: number; name: string; code: string; opened_on: string | null }>(
         'locations?select=id,name,code,opened_on&order=id'),
       select<OrderRow>(`orders?select=location_id,hour_of_day,total,channel,status,business_date&business_date=eq.${today}`),
-      select<OrderRow>(`orders?select=location_id,hour_of_day,total,channel,status,business_date&business_date=in.(${priors.join(',')})`),
+      select<OrderRow>(`orders?select=location_id,hour_of_day,total,channel,status,business_date&business_date=in.(${window.join(',')})`),
       select<{ location_id: number; flavour: string; units: string | number; counts_as_retail: boolean }>(
         `v_cookie_units?select=location_id,flavour,units,counts_as_retail&business_date=eq.${today}`),
       select<FlavourMonth>('v_flavour_monthly?select=location_id,month,flavour,units,pct_of_cookies'),
@@ -101,5 +101,5 @@ export async function loadTv() {
         `&business_date=eq.${today}&order=closed_at.desc`).then((r) => r.slice(0, 14)),
     ]);
 
-  return { today, ym, priors, locations, todayRows, priorRows, cookiesToday, flavourMonths, monthRows, targets, calendar, ticker };
+  return { today, ym, window, locations, todayRows, priorRows, cookiesToday, flavourMonths, monthRows, targets, calendar, ticker };
 }
