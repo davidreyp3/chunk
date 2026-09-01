@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'react';
+import Nav, { type View } from '@/components/Nav';
 
 const W = 1920, H = 1080;
 
@@ -54,7 +55,7 @@ const clock = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-US',
     { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Panama' });
 
-export default function TvBoard() {
+export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: View) => void }) {
   const [data, setData] = useState<Payload | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -144,7 +145,7 @@ export default function TvBoard() {
     );
   }
 
-  if (narrow) return <Phone data={data} vars={vars} err={err} onToggle={toggle} />;
+  if (narrow) return <Phone data={data} vars={vars} err={err} onToggle={toggle} view={view} onSelect={onSelect} />;
 
   const { total, month, special } = data;
   const peak = Math.max(...data.hours.map((h) => Math.max(h.today, h.typical)), 1);
@@ -168,7 +169,7 @@ export default function TvBoard() {
     <div ref={boardRef} style={root}>
       {/* header */}
       <div style={{ height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    flex: 'none', paddingRight: 66 }}>
+                    flex: 'none' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
           <img src={theme === 'dark' ? '/logo-sublogo-ivory.svg' : '/logo-sublogo.svg'}
                alt="Chunk Cookie Bar" style={{ height: 44 }} />
@@ -184,6 +185,7 @@ export default function TvBoard() {
                           background: err ? 'var(--tv-neg)' : 'var(--tv-pos)' }} />
             <div style={{ fontSize: 28, color: 'var(--tv-ink3)' }}>Updated {clock(data.updatedAt)}</div>
           </div>
+          <Nav view={view} onSelect={onSelect} size={52} />
         </div>
       </div>
 
@@ -459,8 +461,9 @@ export default function TvBoard() {
 
 /* ---------- Phone / tablet ---------- */
 
-function Phone({ data, vars, err, onToggle }: {
+function Phone({ data, vars, err, onToggle, view, onSelect }: {
   data: Payload; vars: React.CSSProperties; err: string | null; onToggle: () => void;
+  view: View; onSelect: (v: View) => void;
 }) {
   const { total, month, special } = data;
   const pos = (v: number | null) => v != null && v >= 0;
@@ -484,14 +487,14 @@ function Phone({ data, vars, err, onToggle }: {
 
   return (
     <div style={page}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    paddingRight: 54 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ ...cap, fontSize: 13 }}>Today's sales</div>
         <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 8, ...sub }}>
           <span style={{ width: 8, height: 8, borderRadius: 999,
                          background: err ? 'var(--tv-neg)' : 'var(--tv-pos)' }} />
           {clock(data.updatedAt)}
         </div>
+        <Nav view={view} onSelect={onSelect} size={38} />
       </div>
       <div style={{ fontSize: 15, color: 'var(--tv-ink2)' }}>{longDate(data.day)}</div>
 

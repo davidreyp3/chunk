@@ -1,5 +1,7 @@
 'use client';
 
+import Nav, { type View } from '@/components/Nav';
+
 const T = {
   '--tv-bg': '#1E110D', '--tv-panel': '#2B1811', '--tv-ink': '#FEF4E7',
   '--tv-ink3': '#B3A08F', '--tv-ink4': '#8A7565', '--tv-accent': '#C98B4B',
@@ -13,14 +15,17 @@ const SECTIONS = [
   ['Channels and wholesale', 'Channel share over time, and wholesale broken out by each of the nine accounts.'],
 ];
 
-export default function Analysis() {
+export default function Analysis({ view, onSelect }: { view: View; onSelect: (v: View) => void }) {
   return (
     <div style={{ ...T, minHeight: '100vh', background: 'var(--tv-bg)', color: 'var(--tv-ink)',
                   fontFamily: '-apple-system,BlinkMacSystemFont,system-ui,sans-serif',
-                  padding: '76px 20px 40px', display: 'flex', justifyContent: 'center' }}>
+                  padding: '22px 20px 40px', display: 'flex', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ fontSize: 13, letterSpacing: '.12em', textTransform: 'uppercase',
-                      color: 'var(--tv-ink3)', fontWeight: 700 }}>Analysis</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ fontSize: 13, letterSpacing: '.12em', textTransform: 'uppercase',
+                        color: 'var(--tv-ink3)', fontWeight: 700 }}>Analysis</div>
+          <Nav view={view} onSelect={onSelect} size={38} />
+        </div>
         <div style={{ fontSize: 'clamp(28px, 5vw, 40px)', fontWeight: 700, letterSpacing: '-.022em',
                       lineHeight: 1.1 }}>Coming next</div>
         <p style={{ color: 'var(--tv-ink3)', margin: '0 0 10px', maxWidth: '52ch', lineHeight: 1.5 }}>

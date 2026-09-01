@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Nav, { type View } from '@/components/Nav';
+import { type View } from '@/components/Nav';
 import TvBoard from '@/components/TvBoard';
 import Analysis from '@/components/Analysis';
 
@@ -24,8 +24,9 @@ export default function Dashboard() {
 
   return (
     <>
-      <Nav view={view} onSelect={select} />
-      {view === 'tv' ? <TvBoard /> : <Analysis />}
+      {view === 'tv'
+        ? <TvBoard view={view} onSelect={select} />
+        : <Analysis view={view} onSelect={select} />}
     </>
   );
 }
