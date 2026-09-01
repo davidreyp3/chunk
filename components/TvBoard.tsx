@@ -177,6 +177,12 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
   const PAD = '20px 28px';
   const panel: React.CSSProperties = { background: 'var(--tv-panel)', borderRadius: 24, padding: PAD };
 
+  // Phones get their own layout — the wall board scaled to 390px is unreadable.
+  if (narrow) {
+    return <Phone data={data} vars={vars} err={err} onToggle={toggle}
+                  view={view} onSelect={onSelect} />;
+  }
+
   return (
     <div style={stage}>
     <div ref={boardRef} style={root}>
@@ -275,7 +281,7 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
                 <span style={{ width: 22, height: 14, borderRadius: 3, background: 'var(--tv-bar)' }} />Today</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ width: 22, height: 14, borderRadius: 3, background: 'var(--tv-ghost)' }} />
-                yesterday</div>
+                average day</div>
             </div>
           </div>
           <div style={{ flex: 1, minHeight: 168, display: 'flex', gap: 12, marginTop: 10 }}>
