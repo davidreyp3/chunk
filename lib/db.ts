@@ -33,3 +33,24 @@ export async function upsert(table: string, rows: any[], conflict: string) {
     if (!r.ok) throw new Error(`Supabase upsert ${table} ${r.status}: ${(await r.text()).slice(0, 200)}`);
   }
 }
+
+/** Call a Postgres function. Aggregation happens in the database, so these
+ *  return hundreds of rows where the raw tables would return tens of thousands. */
+export async function rpc<T = any>(fn: string, params: Record<string, string | number | null>) {
+  const qs = Object.entries(params)
+    .filter(([, v]) => v !== null && v !== undefined && v !== '')
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+    .join('&');
+  const out: T[] = [];
+  let offset = 0;
+  for (;;) {
+    const r = await fetch(`${URL}/rest/v1/rpc/${fn}?${qs}&limit=1000&offset=${offset}`, {
+      headers: headers(), cache: 'no-store',
+    });
+    if (!r.ok) throw new Error(`Supabase rpc ${fn} ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    const batch = (await r.json()) as T[];
+    out.push(...batch);
+    if (batch.length < 1000) return out;
+    offset += 1000;
+  }
+}

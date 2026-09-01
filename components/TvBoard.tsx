@@ -44,6 +44,16 @@ type Payload = {
   ticker: { time: string; detail: string; amount: number }[];
 };
 
+/** Wall-display names only. The full flavour names run into the bars at 25px. */
+const SHORT_NAME: Record<string, string> = {
+  'Raspberry White Chocolate': 'Raspberry',
+  'Pistachio White Chocolate': 'Pistachio White',
+  'Coconut Toffee Chocolate Chip': 'Coconut Toffee CC',
+  'Spiced Oatmeal Chocolate Chip': 'Spiced Oatmeal',
+  'Oatmeal Chocolate Chip': 'Oatmeal Choc Chip',
+};
+const short = (n: string) => SHORT_NAME[n] ?? n;
+
 const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US');
 const money2 = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const longDate = (d: string) =>
@@ -413,7 +423,7 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
                 <div style={{ flex: 'none', width: 300, fontSize: 28, whiteSpace: 'nowrap',
                               fontWeight: f.isSpecial ? 600 : 400,
                               color: f.isSpecial ? 'var(--tv-accent)' : 'var(--tv-ink3)' }}>
-                  {f.name}{f.isSpecial ? ' · of the month' : ''}
+                  {short(f.name)}{f.isSpecial ? ' · of the month' : ''}
                 </div>
                 <div style={{ flex: 1, height: 14, background: 'var(--tv-track)', borderRadius: 4 }}>
                   <div style={{ height: 14, borderRadius: 4,
@@ -619,7 +629,7 @@ function Phone({ data, vars, err, onToggle, view, onSelect }: {
                             overflow: 'hidden', textOverflow: 'ellipsis',
                             fontWeight: f.isSpecial ? 700 : 400,
                             color: f.isSpecial ? 'var(--tv-accent)' : 'var(--tv-ink2)' }}>
-                {f.name}
+                {short(f.name)}
               </div>
               <div style={{ width: 90, height: 8, background: 'var(--tv-track)', borderRadius: 4 }}>
                 <div style={{ height: 8, borderRadius: 4,

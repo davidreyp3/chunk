@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Nav, { type View } from '@/components/Nav';
+import { HoursTab, TipsTab, ProductTab, ChannelsTab, StoresTab } from '@/components/AnalysisTabs';
 
 const T = {
   '--tv-bg': '#EDDECD', '--tv-panel': '#FEF4E7', '--tv-panel2': '#F6E8D6',
@@ -69,6 +70,22 @@ const PRESETS: { id: string; label: string; range: () => [string, string] }[] = 
   { id: 'all',   label: 'All time',       range: () => ['2024-10-01', iso(today())] },
 ];
 
+const TABS = [
+  { id: 'sales',    label: 'Sales over time' },
+  { id: 'flavours', label: 'Flavour programme' },
+  { id: 'hours',    label: 'Hours & shifts' },
+  { id: 'tips',     label: 'Tips' },
+  { id: 'product',  label: 'Product & mix' },
+  { id: 'channels', label: 'Channels & clients' },
+  { id: 'stores',   label: 'Store comparison' },
+] as const;
+type Tab = typeof TABS[number]['id'];
+
+/** Only these two tabs read the channel selection. The rest answer questions
+ *  about the whole operation, so the chips are hidden there rather than
+ *  sitting on screen doing nothing. */
+const CHANNEL_TABS = new Set<string>(['sales', 'flavours']);
+
 const periodLabel = (p: string) =>
   p.length === 7
     ? new Date(`${p}-01T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
@@ -82,9 +99,12 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [channels, setChannels] = useState<string[]>(ORDER);
+  const [tab, setTab] = useState<Tab>('sales');
+  const [location, setLocation] = useState<'all' | '1' | '2'>('all');
 
   const [from, to] = custom ?? PRESETS.find((p) => p.id === preset)!.range();
   const chanParam = channels.join(',');
+  const q = `from=${from}&to=${to}&channels=${chanParam}&location=${location}`;
 
   const toggle = (c: string) =>
     setChannels((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
@@ -92,12 +112,13 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetch(`/api/analysis?from=${from}&to=${to}&channels=${chanParam}`, { cache: 'no-store' })
+    fetch(`/api/analysis?from=${from}&to=${to}&channels=${chanParam}&location=${location}`,
+          { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => { if (alive) { setData(d); setLoading(false); } })
       .catch(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [from, to, chanParam]);
+  }, [from, to, chanParam, location]);
 
   const page: React.CSSProperties = {
     ...T, minHeight: '100vh', background: 'var(--tv-bg)', color: 'var(--tv-ink)',
@@ -152,7 +173,8 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
         </div>
 
         {/* Which order types count. Everything below follows this. */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center' }}>
+        <div style={{ display: CHANNEL_TABS.has(tab) ? 'flex' : 'none',
+                      flexWrap: 'wrap', gap: 7, alignItems: 'center' }}>
           {ORDER.filter((c) => data?.channels.byChannel[c]).map((c) => {
             const on = channels.includes(c);
             const v = data!.channels.byChannel[c];
@@ -180,6 +202,42 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
           )}
         </div>
 
+        {/* which store */}
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+          {([['all', 'Both stores'], ['1', 'Local Tocumen'], ['2', 'Sunset']] as const).map(([id, label]) => {
+            const on = location === id;
+            return (
+              <button key={id} onClick={() => setLocation(id)}
+                style={{ padding: '7px 13px', borderRadius: 999, fontSize: 13, cursor: 'pointer',
+                         border: '1px solid ' + (on ? 'transparent' : 'var(--tv-line)'),
+                         background: on ? 'var(--tv-ink)' : 'transparent',
+                         color: on ? 'var(--tv-panel)' : 'var(--tv-ink3)',
+                         fontWeight: on ? 600 : 400, fontFamily: 'inherit' }}>
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* sections — scrolls sideways on a phone rather than wrapping */}
+        <div style={{ display: 'flex', gap: 4, overflowX: 'auto', borderBottom: '1px solid var(--tv-line)',
+                      marginTop: 2, paddingBottom: 0, scrollbarWidth: 'none' }}>
+          {TABS.map((t) => {
+            const on = tab === t.id;
+            return (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                style={{ padding: '10px 13px 11px', fontSize: 14, cursor: 'pointer', border: 0,
+                         background: 'transparent', whiteSpace: 'nowrap', fontFamily: 'inherit',
+                         color: on ? 'var(--tv-ink)' : 'var(--tv-ink4)',
+                         fontWeight: on ? 700 : 400,
+                         borderBottom: '2px solid ' + (on ? 'var(--tv-ink)' : 'transparent'),
+                         marginBottom: -1 }}>
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
         {loading && !data && <div style={{ ...card, ...sub }}>Loading…</div>}
         {data?.error && <div style={{ ...card, color: 'var(--tv-accent)' }}>{data.error}</div>}
 
@@ -194,6 +252,8 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
               </div>
             )}
 
+            {tab === 'sales' && (
+            <>
             <div style={{ display: 'grid', gap: 12,
                           gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))' }}>
               <Kpi label="Revenue" value={money(data.kpis.revenue)}
@@ -234,7 +294,11 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
               </div>
               <Timeline rows={data.timeline} openedOn={data.tocumenOpened} />
             </div>
+            </>
+            )}
 
+            {tab === 'flavours' && (
+            <>
             <div style={card}>
               <div style={cap}>Monthly specials</div>
               <div style={{ ...sub, margin: '8px 0 16px', maxWidth: '68ch' }}>
@@ -258,6 +322,19 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
                 }))}
               />
             </div>
+            </>
+            )}
+
+            {tab === 'hours' && (
+              <HoursTab q={q} locations={data.kpis.byLocation.filter((l) => l.orders > 0)} />
+            )}
+            {tab === 'tips' && (
+              <TipsTab q={q} locations={data.kpis.byLocation.filter((l) => l.orders > 0)} />
+            )}
+            {tab === 'product' && <ProductTab q={q} />}
+            {tab === 'channels' && <ChannelsTab q={q} channelMeta={CHANNEL} />}
+            {tab === 'stores' && <StoresTab q={q} />}
+
           </>
         )}
       </div>

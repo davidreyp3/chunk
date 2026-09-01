@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { select } from '@/lib/db';
+import { select, rpc } from '@/lib/db';
 import { businessToday } from '@/lib/panama';
 
 export const dynamic = 'force-dynamic';
@@ -23,23 +23,68 @@ type CookieDay = {
   counts_as_retail: boolean; flavour: string; tier: string | null; units: string;
 };
 
+const json = (body: any) =>
+  NextResponse.json(body, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const to = url.searchParams.get('to') || businessToday();
   const from = url.searchParams.get('from') || '2024-10-01';
+  const loc = url.searchParams.get('location');
+  const locId = loc && loc !== 'all' ? Number(loc) : null;
+  const locFilter = locId ? `&location_id=eq.${locId}` : '';
+  const section = url.searchParams.get('section') || 'overview';
   const param = url.searchParams.get('channels');
   const selected = new Set(param !== null
     ? param.split(',').filter(Boolean)
     : ALL_CHANNELS);
 
+  const P = { p_from: from, p_to: to, p_loc: locId };
+
+  // Tabs that are answered entirely by a database function.
+  try {
+    if (section === 'hours') {
+      return json({ hours: await rpc('hours_profile', P) });
+    }
+    if (section === 'tips') {
+      return json({ tips: await rpc('tips_summary', P) });
+    }
+    if (section === 'product') {
+      const [products, modifiers, addons] = await Promise.all([
+        rpc('product_mix', P), rpc('modifier_mix', P), rpc('line_addons', P),
+      ]);
+      return json({ products, modifiers, addons });
+    }
+    if (section === 'channels') {
+      const [clients, trend, daily] = await Promise.all([
+        rpc('wholesale_clients', P),
+        rpc('wholesale_trend', P),
+        select<Daily>('v_daily_sales?select=location_id,business_date,channel,orders,revenue'
+          + `&business_date=gte.${from}&business_date=lte.${to}${locFilter}`),
+      ]);
+      return json({ clients, trend, daily });
+    }
+    if (section === 'stores') {
+      const [products, dailyRows] = await Promise.all([
+        rpc('product_mix', { p_from: from, p_to: to, p_loc: null }),
+        select<Daily>('v_daily_sales?select=location_id,business_date,channel,counts_as_retail,orders,revenue'
+          + `&business_date=gte.${from}&business_date=lte.${to}`),
+      ]);
+      const locs = await select<any>('locations?select=id,name,code&order=id');
+      return json({ products, daily: dailyRows, locations: locs });
+    }
+  } catch (e: any) {
+    return json({ error: `Database: ${e.message}`.slice(0, 300) });
+  }
+
   let daily: Daily[], cookies: CookieDay[], flavourMonths: any[], calendar: any[], locations: any[];
   try {
     [daily, cookies, flavourMonths, calendar, locations] = await Promise.all([
       select<Daily>('v_daily_sales?select=location_id,business_date,channel,counts_as_retail,orders,revenue'
-        + `&business_date=gte.${from}&business_date=lte.${to}`),
+        + `&business_date=gte.${from}&business_date=lte.${to}${locFilter}`),
       select<CookieDay>('v_cookie_daily?select=location_id,business_date,channel,counts_as_retail,flavour,tier,units'
-        + `&business_date=gte.${from}&business_date=lte.${to}`),
-      select<any>('v_flavour_monthly?select=month,flavour,units'),
+        + `&business_date=gte.${from}&business_date=lte.${to}${locFilter}`),
+      select<any>(`v_flavour_monthly?select=month,flavour,units${locFilter ? locFilter.replace('&', '&') : ''}`),
       select<any>('flavour_calendar?select=flavour,year_month&role=eq.monthly_special'),
       select<any>('locations?select=id,name,code&order=id'),
     ]);
@@ -154,6 +199,7 @@ export async function GET(req: Request) {
     crossesTocumenOpening: from < TOCUMEN_OPENED && to >= TOCUMEN_OPENED,
     tocumenOpened: TOCUMEN_OPENED,
     locations,
+    location: locId ?? 'all',
     channels: { selected: [...selected], all: ALL_CHANNELS, byChannel,
                 skewsTicket: [...selected].filter((c) => SKEWS_TICKET.has(c)) },
     kpis: {
