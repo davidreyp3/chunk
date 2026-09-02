@@ -718,60 +718,51 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 /* ---------- discounts ---------- */
 
-type DiscRow = { location_id: number; year_month: string; discount_name: string;
-                 stated_pct: string; orders: number; lines: number;
-                 units: string; gross: string; given: string };
+type RateRow = { location_id: number; year_month: string; pct: number;
+                 orders: number; gross: string; given: string; names: string };
 type CountRow = { location_id: number; year_month: string; orders: number; revenue: string };
 type DiscProd = { location_id: number; product_name: string; discount_name: string;
                   lines: number; units: string; given: string };
 
 export function DiscountsTab({ q }: { q: string }) {
-  const { data, loading } = useSection<{ discounts: DiscRow[]; totals: CountRow[];
+  const { data, loading } = useSection<{ rates: RateRow[]; totals: CountRow[];
                                          products: DiscProd[];
                                          locations: { id: number; name: string }[] }>('discounts', q);
-  if (!data?.discounts) return <Pending loading={loading} error={data?.error} />;
+  if (!data?.rates) return <Pending loading={loading} error={data?.error} />;
 
   const n = (v: any) => Number(v || 0);
   const totalOrders = data.totals.reduce((s, r) => s + n(r.orders), 0);
   const revenue = data.totals.reduce((s, r) => s + n(r.revenue), 0);
-
-  // An order can carry two different discounts, so summing the per-type order
-  // counts would double-count it. The honest headline is the largest single
-  // type; anything tighter needs order ids the aggregate does not carry.
-  // An unlabelled discount means something different at each store — 25% at
-  // Tocumen is the staff discount rung on the generic percentage key, while
-  // Sunset's is a mix — so they are never pooled into one row.
   const locName = (id: number) =>
     data.locations?.find((l) => l.id === id)?.name ?? `Location ${id}`;
-  const byType = new Map<string, { orders: number; lines: number; units: number;
-                                   given: number; gross: number; pct: Set<number> }>();
-  for (const r of data.discounts) {
-    const key = r.discount_name === 'Unnamed'
-      ? `No reason recorded · ${locName(r.location_id)}`
-      : r.discount_name;
-    const a = byType.get(key) ?? { orders: 0, lines: 0, units: 0, given: 0, gross: 0, pct: new Set<number>() };
-    a.orders += n(r.orders); a.lines += n(r.lines); a.units += n(r.units);
-    a.given += n(r.given); a.gross += n(r.gross);
-    if (n(r.stated_pct) > 0) a.pct.add(n(r.stated_pct));
-    byType.set(key, a);
+
+  // Grouped by the rate actually charged. The label is unreliable — the same
+  // 25% staff discount is rung both on the named button and on a generic
+  // percentage key that records nothing — so the rate is what identifies it,
+  // and the names found at that rate are shown alongside.
+  const byRate = new Map<number, { orders: number; given: number; gross: number;
+                                   names: Set<string>; locs: Map<number, number> }>();
+  for (const r of data.rates) {
+    const a = byRate.get(r.pct) ?? { orders: 0, given: 0, gross: 0,
+                                     names: new Set<string>(), locs: new Map<number, number>() };
+    a.orders += n(r.orders); a.given += n(r.given); a.gross += n(r.gross);
+    for (const nm of String(r.names || '').split(',').map((x) => x.trim()).filter(Boolean)) a.names.add(nm);
+    a.locs.set(r.location_id, (a.locs.get(r.location_id) ?? 0) + n(r.given));
+    byRate.set(r.pct, a);
   }
-  const types = [...byType.entries()].sort((a, b) => b[1].given - a[1].given);
-  const givenTotal = types.reduce((s, [, v]) => s + v.given, 0);
-  const ordersDiscounted = types.reduce((s, [, v]) => s + v.orders, 0);
+  const rates = [...byRate.entries()].sort((a, b) => b[1].given - a[1].given);
+  const givenTotal = rates.reduce((s, [, v]) => s + v.given, 0);
+  const ordersDiscounted = rates.reduce((s, [, v]) => s + v.orders, 0);
 
   const months = new Map<string, { given: number; orders: number; all: number }>();
-  for (const r of data.discounts) {
-    const m = String(r.year_month).slice(0, 7);
+  const bump = (m: string, f: (a: { given: number; orders: number; all: number }) => void) => {
     const a = months.get(m) ?? { given: 0, orders: 0, all: 0 };
-    a.given += n(r.given); a.orders += n(r.orders);
-    months.set(m, a);
-  }
-  for (const r of data.totals) {
-    const m = String(r.year_month).slice(0, 7);
-    const a = months.get(m) ?? { given: 0, orders: 0, all: 0 };
-    a.all += n(r.orders);
-    months.set(m, a);
-  }
+    f(a); months.set(m, a);
+  };
+  for (const r of data.rates)
+    bump(String(r.year_month).slice(0, 7), (a) => { a.given += n(r.given); a.orders += n(r.orders); });
+  for (const r of data.totals)
+    bump(String(r.year_month).slice(0, 7), (a) => { a.all += n(r.orders); });
   const monthRows = [...months.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 
   const prod = new Map<string, { units: number; given: number }>();
@@ -790,36 +781,25 @@ export function DiscountsTab({ q }: { q: string }) {
         <Note label="Discounted orders" value={num(ordersDiscounted)}
               note={totalOrders ? `${((ordersDiscounted / totalOrders) * 100).toFixed(1)}% of ${num(totalOrders)} orders`
                                 : 'no orders in range'} />
-        <Note label="Kinds of discount" value={num(types.length)}
-              note={types[0] ? `${types[0][0]} is the largest` : '—'} />
+        <Note label="Rates in use" value={num(rates.length)}
+              note={rates[0] ? `${rates[0][0]}% accounts for most of it` : '—'} />
       </div>
 
-      <Card title="By type"
-            note={<>Measured from the money, not the label: a line&rsquo;s cost is what it
-                    should have charged, less what it did. INVU stores the discount as a
-                    <em> percentage</em>, so it can never be summed as an amount.</>}>
+      <Card title="By rate"
+            note={<>Grouped by what was actually taken off the order, because the reason is
+                    often not recorded — Tocumen&rsquo;s 25% staff discount is rung on a generic
+                    percentage key on all but 41 orders. Any reasons that were recorded at a
+                    rate are listed beside it.</>}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {types.map(([name, v]) => (
-            <BarRow key={name}
-              label={name}
-              note={`${num(v.orders)} orders · ${num(v.units)} units · ${
-                v.pct.size ? `${[...v.pct].sort((a, b) => a - b).join('/')}% off`
-                  // Nothing stated, so show what was actually taken off.
-                  : `${v.gross ? ((v.given / v.gross) * 100).toFixed(0) : 0}% off in practice`}`}
+          {rates.map(([pct, v]) => (
+            <BarRow key={pct} label={`${pct}% off`}
+              note={`${num(v.orders)} orders · ${[...v.locs.keys()].map(locName).join(' + ')}${
+                v.names.size ? ` · recorded as ${[...v.names].join(', ')}` : ' · no reason recorded'}`}
               value={money(v.given)} share={v.given}
-              max={Math.max(...types.map(([, x]) => x.given), 1)}
-              accent={name.startsWith('No reason recorded')} />
+              max={Math.max(...rates.map(([, x]) => x.given), 1)}
+              accent={v.names.size === 0} />
           ))}
         </div>
-        {[...byType.keys()].some((k) => k.startsWith('No reason recorded')) && (
-          <div style={{ ...sub, marginTop: 14 }}>
-            Real discounts the till applied without recording a reason, found from the money:
-            what the line should have charged, less what it did. Any report that goes by the
-            discount name cannot see them. At Tocumen these are the 25% staff discount rung on
-            the generic percentage key rather than the named &ldquo;Descuento Empleados&rdquo;
-            button, which has been used on only 41 orders in ten months.
-          </div>
-        )}
       </Card>
 
       <Card title="By month" note="What each month gave away, and how much of it was discounted at all.">
