@@ -74,6 +74,12 @@ export async function GET(req: Request) {
       ]);
       return json({ clients, trend, daily });
     }
+    if (section === 'discounts') {
+      const [discounts, totals, products] = await Promise.all([
+        rpc('discount_mix', P), rpc('order_counts', P), rpc('discount_products', P),
+      ]);
+      return json({ discounts, totals, products });
+    }
     if (section === 'stores') {
       const [products, dailyRows] = await Promise.all([
         rpc('product_mix', { p_from: from, p_to: to, p_loc: null }),

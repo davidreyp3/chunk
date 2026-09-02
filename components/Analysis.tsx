@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Nav, { type View } from '@/components/Nav';
-import { HoursTab, TipsTab, ProductTab, ChannelsTab, StoresTab } from '@/components/AnalysisTabs';
+import { HoursTab, TipsTab, ProductTab, ChannelsTab, StoresTab, DiscountsTab } from '@/components/AnalysisTabs';
 
 const T = {
   '--tv-bg': '#EDDECD', '--tv-panel': '#FEF4E7', '--tv-panel2': '#F6E8D6',
@@ -77,6 +77,7 @@ const TABS = [
   { id: 'tips',     label: 'Tips' },
   { id: 'product',  label: 'Product & mix' },
   { id: 'channels', label: 'Channels & clients' },
+  { id: 'discounts', label: 'Discounts' },
   { id: 'stores',   label: 'Store comparison' },
 ] as const;
 type Tab = typeof TABS[number]['id'];
@@ -339,6 +340,7 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
             )}
             {tab === 'product' && <ProductTab q={q} />}
             {tab === 'channels' && <ChannelsTab q={q} channelMeta={CHANNEL} />}
+            {tab === 'discounts' && <DiscountsTab q={q} />}
             {tab === 'stores' && <StoresTab q={q} />}
 
           </>

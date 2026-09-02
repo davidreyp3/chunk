@@ -715,3 +715,115 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+/* ---------- discounts ---------- */
+
+type DiscRow = { location_id: number; year_month: string; discount_name: string;
+                 stated_pct: string; orders: number; lines: number;
+                 units: string; gross: string; given: string };
+type CountRow = { location_id: number; year_month: string; orders: number; revenue: string };
+type DiscProd = { location_id: number; product_name: string; discount_name: string;
+                  lines: number; units: string; given: string };
+
+export function DiscountsTab({ q }: { q: string }) {
+  const { data, loading } = useSection<{ discounts: DiscRow[]; totals: CountRow[];
+                                         products: DiscProd[] }>('discounts', q);
+  if (!data?.discounts) return <Pending loading={loading} error={data?.error} />;
+
+  const n = (v: any) => Number(v || 0);
+  const totalOrders = data.totals.reduce((s, r) => s + n(r.orders), 0);
+  const revenue = data.totals.reduce((s, r) => s + n(r.revenue), 0);
+
+  // An order can carry two different discounts, so summing the per-type order
+  // counts would double-count it. The honest headline is the largest single
+  // type; anything tighter needs order ids the aggregate does not carry.
+  const byType = new Map<string, { orders: number; lines: number; units: number;
+                                   given: number; gross: number; pct: Set<number> }>();
+  for (const r of data.discounts) {
+    const a = byType.get(r.discount_name) ?? { orders: 0, lines: 0, units: 0, given: 0, gross: 0, pct: new Set<number>() };
+    a.orders += n(r.orders); a.lines += n(r.lines); a.units += n(r.units);
+    a.given += n(r.given); a.gross += n(r.gross);
+    if (n(r.stated_pct) > 0) a.pct.add(n(r.stated_pct));
+    byType.set(r.discount_name, a);
+  }
+  const types = [...byType.entries()].sort((a, b) => b[1].given - a[1].given);
+  const givenTotal = types.reduce((s, [, v]) => s + v.given, 0);
+  const ordersDiscounted = types.reduce((s, [, v]) => s + v.orders, 0);
+
+  const months = new Map<string, { given: number; orders: number; all: number }>();
+  for (const r of data.discounts) {
+    const m = String(r.year_month).slice(0, 7);
+    const a = months.get(m) ?? { given: 0, orders: 0, all: 0 };
+    a.given += n(r.given); a.orders += n(r.orders);
+    months.set(m, a);
+  }
+  for (const r of data.totals) {
+    const m = String(r.year_month).slice(0, 7);
+    const a = months.get(m) ?? { given: 0, orders: 0, all: 0 };
+    a.all += n(r.orders);
+    months.set(m, a);
+  }
+  const monthRows = [...months.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+  const prod = new Map<string, { units: number; given: number }>();
+  for (const r of data.products) {
+    const a = prod.get(r.product_name) ?? { units: 0, given: 0 };
+    a.units += n(r.units); a.given += n(r.given);
+    prod.set(r.product_name, a);
+  }
+  const products = [...prod.entries()].sort((a, b) => b[1].given - a[1].given).slice(0, 12);
+
+  return (
+    <div style={stack}>
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+        <Note label="Given away" value={money(givenTotal)}
+              note={revenue ? `${((givenTotal / revenue) * 100).toFixed(2)}% of sales` : 'no sales in range'} />
+        <Note label="Discounted orders" value={num(ordersDiscounted)}
+              note={totalOrders ? `${((ordersDiscounted / totalOrders) * 100).toFixed(1)}% of ${num(totalOrders)} orders`
+                                : 'no orders in range'} />
+        <Note label="Kinds of discount" value={num(types.length)}
+              note={types[0] ? `${types[0][0]} is the largest` : '—'} />
+      </div>
+
+      <Card title="By type"
+            note={<>Measured from the money, not the label: a line&rsquo;s cost is what it
+                    should have charged, less what it did. INVU stores the discount as a
+                    <em> percentage</em>, so it can never be summed as an amount.</>}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {types.map(([name, v]) => (
+            <BarRow key={name}
+              label={name === 'Unnamed' ? 'Unnamed discount' : name}
+              note={`${num(v.orders)} orders · ${num(v.units)} units${
+                v.pct.size ? ` · ${[...v.pct].sort((a, b) => a - b).join('/')}% off` : ''}`}
+              value={money(v.given)} share={v.given}
+              max={Math.max(...types.map(([, x]) => x.given), 1)}
+              accent={name === 'Unnamed'} />
+          ))}
+        </div>
+        {byType.has('Unnamed') && (
+          <div style={{ ...sub, marginTop: 14 }}>
+            The unnamed rows are real discounts INVU recorded without a reason — they are
+            found by the money alone, and would be invisible in any report that trusts the
+            discount name.
+          </div>
+        )}
+      </Card>
+
+      <Card title="By month" note="What each month gave away, and how much of it was discounted at all.">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {monthRows.map(([m, v]) => (
+            <BarRow key={m}
+              label={new Date(`${m}-01T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              note={v.all ? `${num(v.orders)} of ${num(v.all)} orders · ${((v.orders / v.all) * 100).toFixed(1)}%` : `${num(v.orders)} orders`}
+              value={money(v.given)} share={v.given}
+              max={Math.max(...monthRows.map(([, x]) => x.given), 1)} />
+          ))}
+        </div>
+      </Card>
+
+      <Card title="What gets discounted" note="By the money given away, top 12 products.">
+        <Ranked rows={products.map(([k, v]) => [k, { units: v.units, revenue: v.given }])} />
+      </Card>
+    </div>
+  );
+}
