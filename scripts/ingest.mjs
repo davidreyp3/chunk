@@ -192,7 +192,7 @@ const monthsBetween = (from, to) => {
         }
         if (new Date(n.order.closed_at) >= rawCutoff) {
           raws.push({ location_id: loc.id, invu_order_id: n.order.invu_order_id,
-                      closed_at: n.order.closed_at, payload: o });
+                      closed_at: n.order.closed_at, payload: o, fetched_at: new Date().toISOString() });
         }
       }
 

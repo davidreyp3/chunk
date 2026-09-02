@@ -30,6 +30,7 @@ export async function refreshToday(force = false) {
 
   let count = 0;
   const unmapped: string[] = [];
+  const now = new Date().toISOString();
 
   for (const loc of locations) {
     const { user, pass } = CREDS[loc.id] ?? {};
@@ -49,8 +50,14 @@ export async function refreshToday(force = false) {
       if (n.order.channel === 'unclassified' && n.order.tipo_orden != null) {
         unmapped.push(`${loc.id}:${n.order.tipo_orden}:${n.order.order_type_name}`);
       }
+      // Set fetched_at explicitly. The column defaults to now() but a default
+      // only fires on INSERT, so re-pulling an order we already have left the
+      // timestamp at whenever it was first seen. That made max(fetched_at)
+      // mean "when a new order last arrived" rather than "when we last
+      // checked" — which both the 90s throttle and the board's freshness
+      // indicator read as if it were the latter.
       raws.push({ location_id: loc.id, invu_order_id: n.order.invu_order_id,
-                  closed_at: n.order.closed_at, payload: o });
+                  closed_at: n.order.closed_at, payload: o, fetched_at: now });
     }
 
     if (clients.size) await upsert('clients', [...clients.values()], 'location_id,invu_client_id');
