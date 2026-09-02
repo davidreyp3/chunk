@@ -69,6 +69,40 @@ const ageMin = (iso: string | null) =>
 /** Anything past this and the figures are not "now" in any useful sense. */
 const STALE_MIN = 10;
 
+const SPIN_KEYFRAMES = '@keyframes chunk-spin{to{transform:rotate(360deg)}}';
+
+/** Pull from INVU now, rather than waiting for the two-minute poll. Shaped to
+ *  match the freshness pill beside it; `fs` is the font size, since the wall
+ *  board renders at 1920x1080 and the phone does not. */
+function SyncButton({ onClick, busy, fs }: {
+  onClick: () => void; busy: boolean; fs: number;
+}) {
+  return (
+    <>
+    <style>{SPIN_KEYFRAMES}</style>
+    <button onClick={onClick} disabled={busy} aria-label="Sync now"
+      title="Pull the latest sales from INVU now"
+      style={{ display: 'flex', alignItems: 'center', gap: fs * 0.4, flex: 'none',
+               padding: `${fs * 0.34}px ${fs * 0.72}px`, borderRadius: 999,
+               border: '1px solid var(--tv-border)', background: 'transparent',
+               font: 'inherit', fontSize: fs, color: 'var(--tv-ink3)',
+               cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.55 : 1,
+               transition: 'transform 120ms cubic-bezier(.32,.72,0,1)' }}
+      onPointerDown={(e) => { if (!busy) e.currentTarget.style.transform = 'scale(0.94)'; }}
+      onPointerUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+      onPointerLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}>
+      <svg width={fs} height={fs} viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"
+           style={busy ? { animation: 'chunk-spin 900ms linear infinite' } : undefined}>
+        <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+        <polyline points="21 3 21 9 15 9" />
+      </svg>
+      {busy ? 'Syncing' : 'Sync'}
+    </button>
+    </>
+  );
+}
+
 const clock = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-US',
     { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Panama' });
@@ -76,6 +110,7 @@ const clock = (iso: string) =>
 export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: View) => void }) {
   const [data, setData] = useState<Payload | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [scale, setScale] = useState(1);
 
@@ -113,32 +148,41 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
     } catch {}
   }, []);
 
+  /** `force` skips refreshToday's 90-second self-throttle, which is the whole
+   *  point of the manual button: the automatic poll would otherwise decline to
+   *  go and look. */
+  const load = useCallback(async (force = false) => {
+    if (force) setSyncing(true);
+    try {
+      const r = await fetch(force ? '/api/tv?backfill=1' : '/api/tv', { cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      const next = await r.json();
+      setData(next);
+      // A pull can fail inside a request that itself succeeded, so surface that
+      // rather than showing a green light over unchanged numbers.
+      setErr(next?.refresh?.error ?? null);
+    } catch (e: any) {
+      setErr(e.message);              // keep the last good numbers on screen
+    } finally {
+      if (force) setSyncing(false);
+    }
+  }, []);
+
   useEffect(() => {
     // The TV is the scheduler — no cron, and it only polls while someone can see it.
-    let alive = true;
-    const load = async () => {
-      try {
-        const r = await fetch('/api/tv', { cache: 'no-store' });
-        if (!r.ok) throw new Error(String(r.status));
-        if (alive) { setData(await r.json()); setErr(null); }
-      } catch (e: any) {
-        if (alive) setErr(e.message);   // keep the last good numbers on screen
-      }
-    };
     load();
-    const t = setInterval(load, 120_000);
+    const t = setInterval(() => load(), 120_000);
     // A backgrounded tab has its timers suspended, so coming back to one shows
     // a frozen number with nothing to say it is old. Reload on the way in.
     const wake = () => { if (document.visibilityState === 'visible') load(); };
     document.addEventListener('visibilitychange', wake);
     window.addEventListener('focus', wake);
     return () => {
-      alive = false;
       clearInterval(t);
       document.removeEventListener('visibilitychange', wake);
       window.removeEventListener('focus', wake);
     };
-  }, []);
+  }, [load]);
 
   const toggle = useCallback(() => {
     setTheme((t) => {
@@ -208,6 +252,7 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
   // Phones get their own layout — the wall board scaled to 390px is unreadable.
   if (narrow) {
     return <Phone data={data} vars={vars} err={err} onToggle={toggle}
+                  onSync={() => load(true)} syncing={syncing}
                   view={view} onSelect={onSelect} />;
   }
 
@@ -238,6 +283,7 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
                 : `Updated ${clock(data.dataAt ?? data.updatedAt)}`}
             </div>
           </div>
+          <SyncButton onClick={() => load(true)} busy={syncing} fs={24} />
           <Nav view={view} onSelect={onSelect} size={52} />
         </div>
       </div>
@@ -522,8 +568,9 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
 
 /* ---------- Phone / tablet ---------- */
 
-function Phone({ data, vars, err, onToggle, view, onSelect }: {
+function Phone({ data, vars, err, onToggle, onSync, syncing, view, onSelect }: {
   data: Payload; vars: React.CSSProperties; err: string | null; onToggle: () => void;
+  onSync: () => void; syncing: boolean;
   view: View; onSelect: (v: View) => void;
 }) {
   const { total, month, special } = data;
@@ -559,6 +606,7 @@ function Phone({ data, vars, err, onToggle, view, onSelect }: {
             ? `${Math.round(ageMin(data.dataAt)!)} min old`
             : clock(data.dataAt ?? data.updatedAt)}
         </div>
+        <SyncButton onClick={onSync} busy={syncing} fs={13} />
         <Nav view={view} onSelect={onSelect} size={38} />
       </div>
       <div style={{ fontSize: 15, color: 'var(--tv-ink2)' }}>{longDate(data.day)}</div>
