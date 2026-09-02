@@ -95,7 +95,10 @@ const longDate = (d: string) =>
   new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 
 export default function Analysis({ view, onSelect }: { view: View; onSelect: (v: View) => void }) {
-  const [preset, setPreset] = useState('12m');
+  // Opens on the current month: that is the question being asked most days.
+  // Longer ranges are a click away, and 'all' still crosses the November 2025
+  // Tocumen opening, which the banner warns about.
+  const [preset, setPreset] = useState('month');
   const [custom, setCustom] = useState<[string, string] | null>(null);
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
