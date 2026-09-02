@@ -32,6 +32,8 @@ type Loc = { id: number; name: string; code: string; open: boolean;
 type Payload = {
   error?: string;
   day: string; comparedDays: number; hourNow: number; updatedAt: string;
+  /** When INVU was last pulled — not when this response was built. */
+  dataAt: string | null;
   total: { revenue: number; typical: number; deltaPct: number | null };
   locations: Loc[];
   hours: { hour: number; today: number; typical: number }[];
@@ -61,6 +63,12 @@ const longDate = (d: string) =>
     { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const weekday = (d: string) =>
   new Date(`${d}T12:00:00-05:00`).toLocaleDateString('en-US', { weekday: 'long' });
+/** How old the INVU data is, in minutes. */
+const ageMin = (iso: string | null) =>
+  iso ? (Date.now() - Date.parse(iso)) / 60_000 : null;
+/** Anything past this and the figures are not "now" in any useful sense. */
+const STALE_MIN = 10;
+
 const clock = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-US',
     { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Panama' });
@@ -119,7 +127,17 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
     };
     load();
     const t = setInterval(load, 120_000);
-    return () => { alive = false; clearInterval(t); };
+    // A backgrounded tab has its timers suspended, so coming back to one shows
+    // a frozen number with nothing to say it is old. Reload on the way in.
+    const wake = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('focus', wake);
+    return () => {
+      alive = false;
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('focus', wake);
+    };
   }, []);
 
   const toggle = useCallback(() => {
@@ -212,7 +230,13 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
                         border: '1px solid var(--tv-border)', borderRadius: 999, cursor: 'pointer' }}>
             <div style={{ width: 12, height: 12, borderRadius: 999,
                           background: err ? 'var(--tv-neg)' : 'var(--tv-pos)' }} />
-            <div style={{ fontSize: 28, color: 'var(--tv-ink3)' }}>Updated {clock(data.updatedAt)}</div>
+            <div style={{ fontSize: 28,
+                          color: (ageMin(data.dataAt) ?? 0) > STALE_MIN
+                            ? 'var(--tv-neg)' : 'var(--tv-ink3)' }}>
+              {(ageMin(data.dataAt) ?? 0) > STALE_MIN
+                ? `Stale — ${Math.round(ageMin(data.dataAt)!)} min old`
+                : `Updated ${clock(data.dataAt ?? data.updatedAt)}`}
+            </div>
           </div>
           <Nav view={view} onSelect={onSelect} size={52} />
         </div>
@@ -529,8 +553,11 @@ function Phone({ data, vars, err, onToggle, view, onSelect }: {
         <div style={{ ...cap, fontSize: 13 }}>Today's sales</div>
         <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 8, ...sub }}>
           <span style={{ width: 8, height: 8, borderRadius: 999,
-                         background: err ? 'var(--tv-neg)' : 'var(--tv-pos)' }} />
-          {clock(data.updatedAt)}
+                         background: err || (ageMin(data.dataAt) ?? 0) > STALE_MIN
+                           ? 'var(--tv-neg)' : 'var(--tv-pos)' }} />
+          {(ageMin(data.dataAt) ?? 0) > STALE_MIN
+            ? `${Math.round(ageMin(data.dataAt)!)} min old`
+            : clock(data.dataAt ?? data.updatedAt)}
         </div>
         <Nav view={view} onSelect={onSelect} size={38} />
       </div>

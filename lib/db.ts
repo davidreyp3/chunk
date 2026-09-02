@@ -17,17 +17,16 @@ function headers(extra: Record<string, string> = {}) {
 function stableOrder(path: string): string {
   if (/[?&]order=/.test(path)) return '';
   const m = /[?&]select=([^&]+)/.exec(path);
-  const cols = m
-    ? decodeURIComponent(m[1])
-        .replace(/[\w]+\([^)]*\)/g, '')      // drop embedded resources: order_lines(qty)
-        .split(',')
-        .map((c) => c.trim().split(':').pop()!.trim())
-        .filter((c) => c && c !== '*')
-    : [];
-  if (!cols.length)
-    throw new Error(`select("${path.slice(0, 60)}") cannot be paged safely: `
-      + 'add an explicit &order=, or name the columns in select=.');
-  return `&order=${cols.join(',')}`;
+  if (!m) return '';
+  const cols = decodeURIComponent(m[1])
+    .replace(/[\w]+\([^)]*\)/g, '')        // drop embedded resources: order_lines(qty)
+    .split(',')
+    .map((c) => c.trim().split(':').pop()!.trim())
+    .filter((c) => c && c !== '*');
+  // `select=*` gives nothing to order by. That is fine for the many queries
+  // that fit in one page, so say nothing now and only object below if paging
+  // actually turns out to be needed.
+  return cols.length ? `&order=${cols.join(',')}` : '';
 }
 
 /** PostgREST caps a response at 1000 rows, so page explicitly. */
@@ -45,6 +44,9 @@ export async function select<T = any>(path: string): Promise<T[]> {
     const batch = (await r.json()) as T[];
     out.push(...batch);
     if (batch.length < 1000) return out;
+    if (!order && !/[?&]order=/.test(path))
+      throw new Error(`select("${path.slice(0, 60)}") needs more than one page but `
+        + 'has nothing to order by: add an explicit &order=, or name the columns in select=.');
     offset += 1000;
   }
 }

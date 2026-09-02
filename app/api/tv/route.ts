@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { refreshToday } from '@/lib/refresh';
+import { select } from '@/lib/db';
 import { loadTv, inferMonthlySpecial, retail, live, type OrderRow } from '@/lib/tvdata';
 import { panamaHour } from '@/lib/panama';
 import { resolveFlavour } from '@/lib/normalize';
@@ -24,6 +25,17 @@ export async function GET(req: Request) {
   const backfill = new URL(req.url).searchParams.get('backfill') === '1';
   let refresh: any = null;
   try { refresh = await refreshToday(backfill); } catch (e: any) { refresh = { error: e.message }; }
+
+  // When the data was actually pulled from INVU, which is not when this
+  // request was served: refreshToday self-throttles, and nothing pulls at all
+  // while no tab is open. Reporting the response time here made the board
+  // claim to be current while showing figures hours old.
+  let dataAt: string | null = null;
+  try {
+    const [row] = await select<{ fetched_at: string }>(
+      'raw_orders?select=fetched_at&order=fetched_at.desc');
+    dataAt = row?.fetched_at ?? null;
+  } catch { /* the board falls back to hiding the age */ }
 
   let d: Awaited<ReturnType<typeof loadTv>>;
   try { d = await loadTv(); }
@@ -122,6 +134,7 @@ export async function GET(req: Request) {
     comparedDays: new Set(d.priorRows.filter(retail).map((r) => r.business_date)).size,
     hourNow,
     updatedAt: new Date().toISOString(),
+    dataAt,
     refresh,
     total: {
       revenue: locations.reduce((s, l) => s + l.revenue, 0),

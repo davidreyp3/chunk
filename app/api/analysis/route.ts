@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { select, rpc } from '@/lib/db';
 import { businessToday } from '@/lib/panama';
+import { refreshToday } from '@/lib/refresh';
 import { resolveFlavour } from '@/lib/normalize';
 
 export const dynamic = 'force-dynamic';
@@ -39,6 +40,14 @@ export async function GET(req: Request) {
   const selected = new Set(param !== null
     ? param.split(',').filter(Boolean)
     : ALL_CHANNELS);
+
+  // Nothing else pulls from INVU. Without this the Analysis page showed
+  // whatever the TV board last happened to fetch, which is hours old if nobody
+  // had the board open. Only when the range actually reaches today; refreshToday
+  // self-throttles to 90s, so this is cheap.
+  if (to >= businessToday()) {
+    try { await refreshToday(); } catch { /* stale beats broken */ }
+  }
 
   const P = { p_from: from, p_to: to, p_loc: locId };
 
