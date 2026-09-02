@@ -727,7 +727,8 @@ type DiscProd = { location_id: number; product_name: string; discount_name: stri
 
 export function DiscountsTab({ q }: { q: string }) {
   const { data, loading } = useSection<{ discounts: DiscRow[]; totals: CountRow[];
-                                         products: DiscProd[] }>('discounts', q);
+                                         products: DiscProd[];
+                                         locations: { id: number; name: string }[] }>('discounts', q);
   if (!data?.discounts) return <Pending loading={loading} error={data?.error} />;
 
   const n = (v: any) => Number(v || 0);
@@ -737,14 +738,22 @@ export function DiscountsTab({ q }: { q: string }) {
   // An order can carry two different discounts, so summing the per-type order
   // counts would double-count it. The honest headline is the largest single
   // type; anything tighter needs order ids the aggregate does not carry.
+  // An unlabelled discount means something different at each store — 25% at
+  // Tocumen is the staff discount rung on the generic percentage key, while
+  // Sunset's is a mix — so they are never pooled into one row.
+  const locName = (id: number) =>
+    data.locations?.find((l) => l.id === id)?.name ?? `Location ${id}`;
   const byType = new Map<string, { orders: number; lines: number; units: number;
                                    given: number; gross: number; pct: Set<number> }>();
   for (const r of data.discounts) {
-    const a = byType.get(r.discount_name) ?? { orders: 0, lines: 0, units: 0, given: 0, gross: 0, pct: new Set<number>() };
+    const key = r.discount_name === 'Unnamed'
+      ? `No reason recorded · ${locName(r.location_id)}`
+      : r.discount_name;
+    const a = byType.get(key) ?? { orders: 0, lines: 0, units: 0, given: 0, gross: 0, pct: new Set<number>() };
     a.orders += n(r.orders); a.lines += n(r.lines); a.units += n(r.units);
     a.given += n(r.given); a.gross += n(r.gross);
     if (n(r.stated_pct) > 0) a.pct.add(n(r.stated_pct));
-    byType.set(r.discount_name, a);
+    byType.set(key, a);
   }
   const types = [...byType.entries()].sort((a, b) => b[1].given - a[1].given);
   const givenTotal = types.reduce((s, [, v]) => s + v.given, 0);
@@ -792,21 +801,23 @@ export function DiscountsTab({ q }: { q: string }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {types.map(([name, v]) => (
             <BarRow key={name}
-              label={name === 'Unnamed' ? 'No reason recorded' : name}
+              label={name}
               note={`${num(v.orders)} orders · ${num(v.units)} units · ${
                 v.pct.size ? `${[...v.pct].sort((a, b) => a - b).join('/')}% off`
                   // Nothing stated, so show what was actually taken off.
                   : `${v.gross ? ((v.given / v.gross) * 100).toFixed(0) : 0}% off in practice`}`}
               value={money(v.given)} share={v.given}
               max={Math.max(...types.map(([, x]) => x.given), 1)}
-              accent={name === 'Unnamed'} />
+              accent={name.startsWith('No reason recorded')} />
           ))}
         </div>
-        {byType.has('Unnamed') && (
+        {[...byType.keys()].some((k) => k.startsWith('No reason recorded')) && (
           <div style={{ ...sub, marginTop: 14 }}>
-            Those are real discounts the till applied without recording a reason. They are
-            found from the money — what the line should have charged, less what it did — and
-            are invisible to any report that goes by the discount name.
+            Real discounts the till applied without recording a reason, found from the money:
+            what the line should have charged, less what it did. Any report that goes by the
+            discount name cannot see them. At Tocumen these are the 25% staff discount rung on
+            the generic percentage key rather than the named &ldquo;Descuento Empleados&rdquo;
+            button, which has been used on only 41 orders in ten months.
           </div>
         )}
       </Card>

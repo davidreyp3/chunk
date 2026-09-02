@@ -75,10 +75,11 @@ export async function GET(req: Request) {
       return json({ clients, trend, daily });
     }
     if (section === 'discounts') {
-      const [discounts, totals, products] = await Promise.all([
+      const [discounts, totals, products, locs] = await Promise.all([
         rpc('discount_mix', P), rpc('order_counts', P), rpc('discount_products', P),
+        select<any>('locations?select=id,name&order=id'),
       ]);
-      return json({ discounts, totals, products });
+      return json({ discounts, totals, products, locations: locs });
     }
     if (section === 'stores') {
       const [products, dailyRows] = await Promise.all([
