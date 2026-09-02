@@ -70,13 +70,16 @@ const ageMin = (iso: string | null) =>
 /** Anything past this and the figures are not "now" in any useful sense. */
 const STALE_MIN = 10;
 
+/** One height for both header pills, so they line up whatever their text. */
+const PILL_H = 52;
+
 const SPIN_KEYFRAMES = '@keyframes chunk-spin{to{transform:rotate(360deg)}}';
 
 /** Pull from INVU now, rather than waiting for the two-minute poll. Shaped to
  *  match the freshness pill beside it; `fs` is the font size, since the wall
  *  board renders at 1920x1080 and the phone does not. */
-function SyncButton({ onClick, busy, fs }: {
-  onClick: () => void; busy: boolean; fs: number;
+function SyncButton({ onClick, busy, fs, h }: {
+  onClick: () => void; busy: boolean; fs: number; h: number;
 }) {
   return (
     <>
@@ -84,7 +87,8 @@ function SyncButton({ onClick, busy, fs }: {
     <button onClick={onClick} disabled={busy} aria-label="Sync now"
       title="Pull the latest sales from INVU now"
       style={{ display: 'flex', alignItems: 'center', gap: fs * 0.4, flex: 'none',
-               padding: `${fs * 0.34}px ${fs * 0.72}px`, borderRadius: 999,
+               height: h, boxSizing: 'border-box',
+               padding: `0 ${fs * 0.8}px`, borderRadius: 999,
                border: '1px solid var(--tv-border)', background: 'transparent',
                font: 'inherit', fontSize: fs, color: 'var(--tv-ink3)',
                cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.55 : 1,
@@ -272,7 +276,8 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
         <div style={{ display: 'flex', alignItems: 'center', gap: 36 }}>
           <div style={{ fontSize: 28, color: 'var(--tv-ink2)', letterSpacing: '-0.01em' }}>{longDate(data.day)}</div>
           <div onClick={toggle}
-               style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '9px 22px',
+               style={{ display: 'flex', alignItems: 'center', gap: 14, height: PILL_H,
+                        padding: '0 22px', boxSizing: 'border-box',
                         border: '1px solid var(--tv-border)', borderRadius: 999, cursor: 'pointer' }}>
             <div style={{ width: 12, height: 12, borderRadius: 999,
                           background: err ? 'var(--tv-neg)' : 'var(--tv-pos)' }} />
@@ -284,7 +289,7 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
                 : `Updated ${clock(data.dataAt ?? data.updatedAt)}`}
             </div>
           </div>
-          <SyncButton onClick={() => load(true)} busy={syncing} fs={24} />
+          <SyncButton onClick={() => load(true)} busy={syncing} fs={24} h={PILL_H} />
           <Nav view={view} onSelect={onSelect} size={52} />
         </div>
       </div>
@@ -619,7 +624,7 @@ function Phone({ data, vars, err, onToggle, onSync, syncing, view, onSelect }: {
             ? `${Math.round(ageMin(data.dataAt)!)} min old`
             : clock(data.dataAt ?? data.updatedAt)}
         </div>
-        <SyncButton onClick={onSync} busy={syncing} fs={13} />
+        <SyncButton onClick={onSync} busy={syncing} fs={13} h={30} />
         <Nav view={view} onSelect={onSelect} size={38} />
       </div>
       <div style={{ fontSize: 15, color: 'var(--tv-ink2)' }}>{longDate(data.day)}</div>
