@@ -792,9 +792,11 @@ export function DiscountsTab({ q }: { q: string }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {types.map(([name, v]) => (
             <BarRow key={name}
-              label={name === 'Unnamed' ? 'Unnamed discount' : name}
-              note={`${num(v.orders)} orders · ${num(v.units)} units${
-                v.pct.size ? ` · ${[...v.pct].sort((a, b) => a - b).join('/')}% off` : ''}`}
+              label={name === 'Unnamed' ? 'No reason recorded' : name}
+              note={`${num(v.orders)} orders · ${num(v.units)} units · ${
+                v.pct.size ? `${[...v.pct].sort((a, b) => a - b).join('/')}% off`
+                  // Nothing stated, so show what was actually taken off.
+                  : `${v.gross ? ((v.given / v.gross) * 100).toFixed(0) : 0}% off in practice`}`}
               value={money(v.given)} share={v.given}
               max={Math.max(...types.map(([, x]) => x.given), 1)}
               accent={name === 'Unnamed'} />
@@ -802,9 +804,9 @@ export function DiscountsTab({ q }: { q: string }) {
         </div>
         {byType.has('Unnamed') && (
           <div style={{ ...sub, marginTop: 14 }}>
-            The unnamed rows are real discounts INVU recorded without a reason — they are
-            found by the money alone, and would be invisible in any report that trusts the
-            discount name.
+            Those are real discounts the till applied without recording a reason. They are
+            found from the money — what the line should have charged, less what it did — and
+            are invisible to any report that goes by the discount name.
           </div>
         )}
       </Card>
