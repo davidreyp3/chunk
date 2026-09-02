@@ -41,12 +41,17 @@ export async function GET(req: Request) {
     ? param.split(',').filter(Boolean)
     : ALL_CHANNELS);
 
-  // Nothing else pulls from INVU. Without this the Analysis page showed
-  // whatever the TV board last happened to fetch, which is hours old if nobody
-  // had the board open. Only when the range actually reaches today; refreshToday
-  // self-throttles to 90s, so this is cheap.
+  // Nothing else pulls from INVU, so without this the Analysis page shows
+  // whatever the TV board last happened to fetch. But the pull takes ~10s, and
+  // on a twelve-month range today is 0.3% of the data — not worth making every
+  // tab switch wait for it. So: block only on short ranges, where today is a
+  // material share of what is on screen, and otherwise start the refresh and
+  // serve the current figures immediately.
+  const SHORT_RANGE_DAYS = 31;
   if (to >= businessToday()) {
-    try { await refreshToday(); } catch { /* stale beats broken */ }
+    const span = Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
+    const pull = refreshToday().catch(() => { /* stale beats broken */ });
+    if (span <= SHORT_RANGE_DAYS) await pull;
   }
 
   const P = { p_from: from, p_to: to, p_loc: locId };
