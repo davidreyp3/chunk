@@ -20,9 +20,8 @@ type Daily = {
   location_id: number; business_date: string; channel: string;
   counts_as_retail: boolean; orders: number; revenue: string;
 };
-type CookieDay = {
-  location_id: number; business_date: string; channel: string;
-  counts_as_retail: boolean; flavour: string; tier: string | null; units: string;
+type CookieChannel = {
+  location_id: number; channel: string; counts_as_retail: boolean; units: string;
 };
 
 const json = (body: any) =>
@@ -47,6 +46,8 @@ export async function GET(req: Request) {
   // tab switch wait for it. So: block only on short ranges, where today is a
   // material share of what is on screen, and otherwise start the refresh and
   // serve the current figures immediately.
+  const P = { p_from: from, p_to: to, p_loc: locId };
+
   const SHORT_RANGE_DAYS = 31;
   if (to >= businessToday()) {
     const span = Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
@@ -54,7 +55,6 @@ export async function GET(req: Request) {
     if (span <= SHORT_RANGE_DAYS) await pull;
   }
 
-  const P = { p_from: from, p_to: to, p_loc: locId };
 
   // Tabs that are answered entirely by a database function.
   try {
@@ -99,13 +99,14 @@ export async function GET(req: Request) {
     return json({ error: `Database: ${e.message}`.slice(0, 300) });
   }
 
-  let daily: Daily[], cookies: CookieDay[], flavourMonths: any[], calendar: any[], locations: any[];
+  let daily: Daily[], cookies: CookieChannel[], flavourMonths: any[], calendar: any[], locations: any[];
   try {
     [daily, cookies, flavourMonths, calendar, locations] = await Promise.all([
       select<Daily>('v_daily_sales?select=location_id,business_date,channel,counts_as_retail,orders,revenue'
         + `&business_date=gte.${from}&business_date=lte.${to}${locFilter}`),
-      select<CookieDay>('v_cookie_daily?select=location_id,business_date,channel,counts_as_retail,flavour,tier,units'
-        + `&business_date=gte.${from}&business_date=lte.${to}${locFilter}`),
+      // Aggregated in the database: the raw view is 14,628 rows over a year and
+      // all of it was only ever summed into one number.
+      rpc<CookieChannel>('cookie_units_by_channel', P),
       select<any>(`v_flavour_monthly?select=month,flavour,units${locFilter ? locFilter.replace('&', '&') : ''}`),
       select<any>('flavour_calendar?select=flavour,year_month&role=eq.monthly_special'),
       select<any>('locations?select=id,name,code&order=id'),
