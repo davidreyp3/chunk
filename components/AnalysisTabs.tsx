@@ -718,17 +718,18 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 /* ---------- discounts ---------- */
 
-type RateRow = { location_id: number; year_month: string; pct: number;
-                 orders: number; gross: string; given: string; names: string };
+type GroupRow = { location_id: number; year_month: string; discount_name: string;
+                  pct: number; named: boolean;
+                  orders: number; gross: string; given: string };
 type CountRow = { location_id: number; year_month: string; orders: number; revenue: string };
 type DiscProd = { location_id: number; product_name: string; discount_name: string;
                   lines: number; units: string; given: string };
 
 export function DiscountsTab({ q }: { q: string }) {
-  const { data, loading } = useSection<{ rates: RateRow[]; totals: CountRow[];
+  const { data, loading } = useSection<{ groups: GroupRow[]; totals: CountRow[];
                                          products: DiscProd[];
                                          locations: { id: number; name: string }[] }>('discounts', q);
-  if (!data?.rates) return <Pending loading={loading} error={data?.error} />;
+  if (!data?.groups) return <Pending loading={loading} error={data?.error} />;
 
   const n = (v: any) => Number(v || 0);
   const totalOrders = data.totals.reduce((s, r) => s + n(r.orders), 0);
@@ -736,30 +737,43 @@ export function DiscountsTab({ q }: { q: string }) {
   const locName = (id: number) =>
     data.locations?.find((l) => l.id === id)?.name ?? `Location ${id}`;
 
-  // Grouped by the rate actually charged. The label is unreliable — the same
-  // 25% staff discount is rung both on the named button and on a generic
-  // percentage key that records nothing — so the rate is what identifies it,
-  // and the names found at that rate are shown alongside.
-  const byRate = new Map<number, { orders: number; given: number; gross: number;
-                                   names: Set<string>; locs: Map<number, number> }>();
-  for (const r of data.rates) {
-    const a = byRate.get(r.pct) ?? { orders: 0, given: 0, gross: 0,
-                                     names: new Set<string>(), locs: new Map<number, number>() };
+  // Neither field is reliable on its own. The till leaves the name blank for
+  // Tocumen's staff discount, so grouping by name loses it; the 2x1 promo gives
+  // one free cookie in a basket of any size, so it lands on a different rate
+  // every time and grouping by rate scatters it across 44 buckets. The name
+  // therefore wins wherever the till recorded one, and the rate fills in where
+  // it did not — with the unlabelled 25% at Tocumen folded into the staff
+  // discount, which David confirmed is what it is.
+  const STAFF = 'Descuento Empleados';
+  const TOCUMEN = 1;
+  // Tocumen only: David confirmed the unlabelled 25% there is the staff
+  // discount. Sunset runs no staff discount, so its 25% stays a plain rate and
+  // must not be folded in — that would invent a programme the store does not
+  // have.
+  const label = (r: GroupRow) =>
+    !r.named && r.pct === 25 && r.location_id === TOCUMEN ? STAFF : r.discount_name;
+
+  const byGroup = new Map<string, { orders: number; given: number; gross: number;
+                                    unlabelled: number; locs: Set<number>; pcts: Set<number> }>();
+  for (const r of data.groups) {
+    const k = label(r);
+    const a = byGroup.get(k) ?? { orders: 0, given: 0, gross: 0, unlabelled: 0,
+                                  locs: new Set<number>(), pcts: new Set<number>() };
     a.orders += n(r.orders); a.given += n(r.given); a.gross += n(r.gross);
-    for (const nm of String(r.names || '').split(',').map((x) => x.trim()).filter(Boolean)) a.names.add(nm);
-    a.locs.set(r.location_id, (a.locs.get(r.location_id) ?? 0) + n(r.given));
-    byRate.set(r.pct, a);
+    if (!r.named) a.unlabelled += n(r.orders);
+    a.locs.add(r.location_id); a.pcts.add(r.pct);
+    byGroup.set(k, a);
   }
-  const rates = [...byRate.entries()].sort((a, b) => b[1].given - a[1].given);
-  const givenTotal = rates.reduce((s, [, v]) => s + v.given, 0);
-  const ordersDiscounted = rates.reduce((s, [, v]) => s + v.orders, 0);
+  const groups = [...byGroup.entries()].sort((a, b) => b[1].given - a[1].given);
+  const givenTotal = groups.reduce((s, [, v]) => s + v.given, 0);
+  const ordersDiscounted = groups.reduce((s, [, v]) => s + v.orders, 0);
 
   const months = new Map<string, { given: number; orders: number; all: number }>();
   const bump = (m: string, f: (a: { given: number; orders: number; all: number }) => void) => {
     const a = months.get(m) ?? { given: 0, orders: 0, all: 0 };
     f(a); months.set(m, a);
   };
-  for (const r of data.rates)
+  for (const r of data.groups)
     bump(String(r.year_month).slice(0, 7), (a) => { a.given += n(r.given); a.orders += n(r.orders); });
   for (const r of data.totals)
     bump(String(r.year_month).slice(0, 7), (a) => { a.all += n(r.orders); });
@@ -781,24 +795,30 @@ export function DiscountsTab({ q }: { q: string }) {
         <Note label="Discounted orders" value={num(ordersDiscounted)}
               note={totalOrders ? `${((ordersDiscounted / totalOrders) * 100).toFixed(1)}% of ${num(totalOrders)} orders`
                                 : 'no orders in range'} />
-        <Note label="Rates in use" value={num(rates.length)}
-              note={rates[0] ? `${rates[0][0]}% accounts for most of it` : '—'} />
+        <Note label="Kinds of discount" value={num(groups.length)}
+              note={groups[0] ? `${groups[0][0]} is the largest` : '\u2014'} />
       </div>
 
-      <Card title="By rate"
-            note={<>Grouped by what was actually taken off the order, because the reason is
-                    often not recorded — Tocumen&rsquo;s 25% staff discount is rung on a generic
-                    percentage key on all but 41 orders. Any reasons that were recorded at a
-                    rate are listed beside it.</>}>
+      <Card title="By discount"
+            note={<>Named by the reason the till recorded, and by the rate charged where it
+                    recorded none. Tocumen&rsquo;s 25% staff discount is rung on a generic
+                    percentage key on all but 41 orders, so it is folded in here rather than
+                    left anonymous.</>}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {rates.map(([pct, v]) => (
-            <BarRow key={pct} label={`${pct}% off`}
-              note={`${num(v.orders)} orders · ${[...v.locs.keys()].map(locName).join(' + ')}${
-                v.names.size ? ` · recorded as ${[...v.names].join(', ')}` : ' · no reason recorded'}`}
-              value={money(v.given)} share={v.given}
-              max={Math.max(...rates.map(([, x]) => x.given), 1)}
-              accent={v.names.size === 0} />
-          ))}
+          {groups.map(([name, v]) => {
+            const pcts = [...v.pcts].sort((a, b) => a - b);
+            const spread = pcts.length === 1
+              ? `${pcts[0]}% off`
+              : `${v.gross ? ((v.given / v.gross) * 100).toFixed(0) : 0}% off on average`;
+            return (
+              <BarRow key={name} label={name}
+                note={`${num(v.orders)} orders \u00b7 ${[...v.locs].map(locName).join(' + ')} \u00b7 ${spread}${
+                  v.unlabelled ? ` \u00b7 ${num(v.unlabelled)} with no reason recorded` : ''}`}
+                value={money(v.given)} share={v.given}
+                max={Math.max(...groups.map(([, x]) => x.given), 1)}
+                accent={v.unlabelled > v.orders / 2} />
+            );
+          })}
         </div>
       </Card>
 
@@ -807,7 +827,7 @@ export function DiscountsTab({ q }: { q: string }) {
           {monthRows.map(([m, v]) => (
             <BarRow key={m}
               label={new Date(`${m}-01T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-              note={v.all ? `${num(v.orders)} of ${num(v.all)} orders · ${((v.orders / v.all) * 100).toFixed(1)}%` : `${num(v.orders)} orders`}
+              note={v.all ? `${num(v.orders)} of ${num(v.all)} orders \u00b7 ${((v.orders / v.all) * 100).toFixed(1)}%` : `${num(v.orders)} orders`}
               value={money(v.given)} share={v.given}
               max={Math.max(...monthRows.map(([, x]) => x.given), 1)} />
           ))}
