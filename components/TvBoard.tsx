@@ -292,7 +292,7 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
       <div style={{ display: 'flex', gap: 16, flex: 'none' }}>
         <div style={{ ...panel, width: 700, display: 'flex',
                       flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div style={L}>Revenue today</div>
+          <div style={L}>Revenue today · retail</div>
           <div style={{ fontSize: 100, fontWeight: 600, letterSpacing: '-0.03em', lineHeight: 0.94 }}>
             {money(total.revenue)}
           </div>
@@ -535,7 +535,7 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10,
                           fontSize: 25, color: 'var(--tv-ink4)' }}>
-              <div>day {month.dayOfMonth} of {month.daysInMonth} · all channels</div>
+              <div>day {month.dayOfMonth} of {month.daysInMonth} · all channels, incl. wholesale</div>
               <div>{month.target ? `${money(Math.max(0, month.target - month.mtd))} to go` : ''}</div>
             </div>
           </div>
@@ -612,7 +612,7 @@ function Phone({ data, vars, err, onToggle, onSync, syncing, view, onSelect }: {
       <div style={{ fontSize: 15, color: 'var(--tv-ink2)' }}>{longDate(data.day)}</div>
 
       <div style={card}>
-        <div style={cap}>Revenue today</div>
+        <div style={cap}>Revenue today · retail</div>
         <div style={{ fontSize: 52, fontWeight: 700, letterSpacing: '-.03em', lineHeight: 1.05, margin: '6px 0 10px' }}>
           {money(total.revenue)}
         </div>
@@ -728,7 +728,7 @@ function Phone({ data, vars, err, onToggle, onSync, syncing, view, onSelect }: {
         <div style={{ height: 12, background: 'var(--tv-track)', borderRadius: 4, overflow: 'hidden' }}>
           {pct != null && <div style={{ height: 12, width: `${Math.min(100, pct)}%`, background: 'var(--tv-bar)' }} />}
         </div>
-        <div style={{ ...sub, marginTop: 8 }}>day {month.dayOfMonth} of {month.daysInMonth} · all channels</div>
+        <div style={{ ...sub, marginTop: 8 }}>day {month.dayOfMonth} of {month.daysInMonth} · all channels, incl. wholesale</div>
       </div>
 
       <div style={card}>
