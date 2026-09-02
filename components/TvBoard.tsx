@@ -28,7 +28,8 @@ const THEMES: Record<'dark' | 'light', Record<string, string>> = {
 };
 
 type Loc = { id: number; name: string; code: string; open: boolean;
-             revenue: number; orders: number; avgTicket: number; deltaPct: number | null };
+             revenue: number; orders: number; avgTicket: number; deltaPct: number | null;
+             wholesale: number; wholesaleOrders: number; allRevenue: number };
 type Payload = {
   error?: string;
   day: string; comparedDays: number; hourNow: number; updatedAt: string;
@@ -322,11 +323,23 @@ export default function TvBoard({ view, onSelect }: { view: View; onSelect: (v: 
                 <div style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.01em' }}>{l.name}</div>
                 <div style={{ fontSize: 25, color: 'var(--tv-ink4)', marginTop: 3 }}>{l.code}</div>
               </div>
-              <div style={{ fontSize: 60, fontWeight: 600, letterSpacing: '-0.025em', lineHeight: 1,
-                            color: 'var(--tv-ink2)' }}>{money(l.revenue)}</div>
+              <div>
+                <div style={{ fontSize: 60, fontWeight: 600, letterSpacing: '-0.025em', lineHeight: 1,
+                              color: 'var(--tv-ink2)' }}>{money(l.allRevenue)}</div>
+                {/* Sunset takes about 42% of its money wholesale, so the store's
+                    real day is the total. The split stays visible because the
+                    two halves behave nothing alike. */}
+                {l.wholesale > 0 && (
+                  <div style={{ fontSize: 24, color: 'var(--tv-ink4)', marginTop: 8 }}>
+                    {money(l.revenue)} retail · {money(l.wholesale)} wholesale
+                  </div>
+                )}
+              </div>
               <div style={{ display: 'flex', gap: 40 }}>
                 <div>
-                  <div style={{ fontSize: 25, color: 'var(--tv-ink4)' }}>Transactions</div>
+                  <div style={{ fontSize: 25, color: 'var(--tv-ink4)' }}>
+                    Transactions{l.wholesale > 0 ? ' · retail' : ''}
+                  </div>
                   <div style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.01em' }}>{l.orders}</div>
                 </div>
                 <div>
@@ -632,10 +645,15 @@ function Phone({ data, vars, err, onToggle, onSync, syncing, view, onSelect }: {
         <div key={l.id} style={{ ...card, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontSize: 17, fontWeight: 600 }}>{l.name}</div>
-            <div style={sub}>{l.orders} tx · {money2(l.avgTicket)}</div>
+            <div style={sub}>{l.orders} tx · {money2(l.avgTicket)}{l.wholesale > 0 ? ' retail' : ''}</div>
+            {l.wholesale > 0 && (
+              <div style={{ ...sub, fontSize: 12.5 }}>
+                {money(l.revenue)} retail · {money(l.wholesale)} wholesale
+              </div>
+            )}
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-.02em' }}>{money(l.revenue)}</div>
+            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-.02em' }}>{money(l.allRevenue)}</div>
             {l.deltaPct != null && (
               <div style={{ fontSize: 14, fontWeight: 600,
                             color: pos(l.deltaPct) ? 'var(--tv-pos)' : 'var(--tv-neg)' }}>

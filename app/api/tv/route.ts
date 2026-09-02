@@ -57,10 +57,18 @@ export async function GET(req: Request) {
     const days = traded(l.id) || 1;
     const typical = sum(d.priorRows.filter(
       (r) => r.location_id === l.id && retail(r) && r.hour_of_day <= hourNow)) / days;
+    // Wholesale is roughly 42% of Sunset, so a retail-only figure badly
+    // understates the store. It is reported alongside rather than folded in:
+    // transactions and average ticket only mean anything over retail, and one
+    // wholesale delivery would swamp both.
+    const trade = d.todayRows.filter(
+      (r) => r.location_id === l.id && !retail(r) && r.status !== 'Nota Credito');
+    const wholesale = sum(trade);
     return {
       id: l.id, name: l.name, code: l.code, open,
       revenue, orders: mine.length,
       avgTicket: mine.length ? revenue / mine.length : 0,
+      wholesale, wholesaleOrders: trade.length, allRevenue: revenue + wholesale,
       typical, deltaPct: typical ? ((revenue - typical) / typical) * 100 : null,
     };
   });
