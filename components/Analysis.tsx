@@ -41,8 +41,6 @@ type Data = {
     byLocation: { id: number; name: string; revenue: number; orders: number; avgTicket: number }[];
   };
   timeline: { period: string; channels: Record<string, number>; total: number }[];
-  specials: Special[];
-  permanent: { flavour: string; share: number }[];
 };
 
 const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US');
@@ -106,12 +104,29 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
   const [tab, setTab] = useState<Tab>('sales');
   const [location, setLocation] = useState<'all' | '1' | '2'>('all');
 
+  // Fetched separately and only while its own tab is open: it costs ~3s across
+  // every month ever traded, and used to sit in the overview that all eight
+  // tabs wait on.
+  const [flavours, setFlavours] =
+    useState<{ specials: Special[]; permanent: { flavour: string; share: number }[] } | null>(null);
+
   const [from, to] = custom ?? PRESETS.find((p) => p.id === preset)!.range();
   const chanParam = channels.join(',');
   const q = `from=${from}&to=${to}&channels=${chanParam}&location=${location}`;
 
   const toggle = (c: string) =>
     setChannels((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+
+  useEffect(() => {
+    if (tab !== 'flavours') return;
+    let alive = true;
+    setFlavours(null);
+    fetch(`/api/analysis?section=flavours&${q}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => { if (alive) setFlavours(d); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [tab, q]);
 
   useEffect(() => {
     let alive = true;
@@ -317,20 +332,24 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
                 {' '}— never absolute units, since traffic and prices differ. Months before November 2025
                 are Sunset-only, at roughly a third of today&rsquo;s volume, and are marked.
               </div>
-              <Specials rows={data.specials} scaleTo={data.permanent[0]?.share ?? 25} />
+              {flavours
+                ? <Specials rows={flavours.specials} scaleTo={flavours.permanent[0]?.share ?? 25} />
+                : <div style={sub}>Loading…</div>}
             </div>
 
             <div style={card}>
               <div style={cap}>Permanent menu, for comparison</div>
               <div style={{ ...sub, margin: '8px 0 14px' }}>Average share across every month.</div>
-              <Specials
-                plain
-                scaleTo={data.permanent[0]?.share ?? 25}
-                rows={data.permanent.map((p) => ({
-                  month: '', flavour: p.flavour, units: 0, share: p.share,
-                  totalCookies: 0, categoryGrowth: null, preTocumen: false, current: false,
-                }))}
-              />
+              {flavours
+                ? <Specials
+                    plain
+                    scaleTo={flavours.permanent[0]?.share ?? 25}
+                    rows={flavours.permanent.map((p) => ({
+                      month: '', flavour: p.flavour, units: 0, share: p.share,
+                      totalCookies: 0, categoryGrowth: null, preTocumen: false, current: false,
+                    }))}
+                  />
+                : <div style={sub}>Loading…</div>}
             </div>
             </>
             )}

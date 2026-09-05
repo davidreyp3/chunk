@@ -27,6 +27,72 @@ type CookieChannel = {
 const json = (body: any) =>
   NextResponse.json(body, { status: 200, headers: { 'Cache-Control': 'no-store' } });
 
+/** The flavour programme: how each monthly special did in its own month,
+ *  and the permanent menu to compare it against. Lifted out of the
+ *  overview because it costs ~3s over every month ever traded and only
+ *  one tab reads it. */
+function flavourProgramme(flavourMonths: any[], calendar: any[]) {
+  const n = (v: any) => Number(v || 0);
+  // ---- the flavour programme ----
+  const specialFor = new Map<string, string>();
+  for (const c of calendar) specialFor.set(String(c.year_month).slice(0, 7), c.flavour);
+
+  const monthTotals = new Map<string, number>();
+  const monthFlavour = new Map<string, Map<string, number>>();
+  for (const r of flavourMonths) {
+    const m = String(r.month).slice(0, 7);
+    monthTotals.set(m, (monthTotals.get(m) || 0) + n(r.units));
+    if (!monthFlavour.has(m)) monthFlavour.set(m, new Map());
+    const t = monthFlavour.get(m)!;
+    t.set(r.flavour, (t.get(r.flavour) || 0) + n(r.units));
+  }
+  const months = [...monthTotals.keys()].sort();
+  const thisMonth = businessToday().slice(0, 7);
+
+  const specials = months
+    .filter((m) => specialFor.has(m))
+    .map((m) => {
+      const sold = monthFlavour.get(m);
+      const flavour = resolveFlavour(specialFor.get(m)!, sold?.keys() ?? []);
+      const units = sold?.get(flavour) ?? 0;
+      const total = monthTotals.get(m) || 1;
+      const prevMonth = months[months.indexOf(m) - 1];
+      const prevTotal = prevMonth ? monthTotals.get(prevMonth) ?? 0 : 0;
+      return {
+        month: m,
+        flavour,
+        units,
+        share: (units / total) * 100,
+        totalCookies: total,
+        // Did the category grow that month, or did the special just take share?
+        // A partial current month against a full previous one is meaningless.
+        categoryGrowth: prevTotal && m !== thisMonth ? ((total - prevTotal) / prevTotal) * 100 : null,
+        preTocumen: m < TOCUMEN_OPENED.slice(0, 7),
+        current: m === thisMonth,
+      };
+    })
+    .filter((s) => s.units > 0 || s.current);
+
+  // Permanent menu: present in most months, for comparison against the specials.
+  const presence = new Map<string, number>();
+  for (const m of months) {
+    for (const [f, u] of monthFlavour.get(m) ?? []) {
+      if ((u / (monthTotals.get(m) || 1)) * 100 >= 1) presence.set(f, (presence.get(f) || 0) + 1);
+    }
+  }
+  const permanent = [...presence.entries()]
+    .filter(([, count]) => count >= months.length * 0.6)
+    .map(([flavour]) => {
+      const shares = months
+        .map((m) => ((monthFlavour.get(m)?.get(flavour) ?? 0) / (monthTotals.get(m) || 1)) * 100)
+        .filter((v) => v >= 0.5);
+      return { flavour, share: shares.reduce((a, b) => a + b, 0) / (shares.length || 1) };
+    })
+    .sort((a, b) => b.share - a.share);
+
+  return { specials: specials.slice().sort((a, b) => b.share - a.share), permanent };
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const to = url.searchParams.get('to') || businessToday();
@@ -86,6 +152,16 @@ export async function GET(req: Request) {
       ]);
       return json({ groups, totals, products, locations: locs });
     }
+    if (section === 'flavours') {
+      // 3 seconds of work over every month ever traded, and only the flavour
+      // tab reads it. It used to run on the overview, which every tab waits on,
+      // so opening Discounts paid for the flavour programme.
+      const [flavourMonths, calendar] = await Promise.all([
+        select<any>(`v_flavour_monthly?select=month,flavour,units${locFilter}`),
+        select<any>('flavour_calendar?select=flavour,year_month&role=eq.monthly_special'),
+      ]);
+      return json(flavourProgramme(flavourMonths, calendar));
+    }
     if (section === 'stores') {
       const [products, dailyRows] = await Promise.all([
         rpc('product_mix', { p_from: from, p_to: to, p_loc: null }),
@@ -99,16 +175,14 @@ export async function GET(req: Request) {
     return json({ error: `Database: ${e.message}`.slice(0, 300) });
   }
 
-  let daily: Daily[], cookies: CookieChannel[], flavourMonths: any[], calendar: any[], locations: any[];
+  let daily: Daily[], cookies: CookieChannel[], locations: any[];
   try {
-    [daily, cookies, flavourMonths, calendar, locations] = await Promise.all([
+    [daily, cookies, locations] = await Promise.all([
       select<Daily>('v_daily_sales?select=location_id,business_date,channel,counts_as_retail,orders,revenue'
         + `&business_date=gte.${from}&business_date=lte.${to}${locFilter}`),
       // Aggregated in the database: the raw view is 14,628 rows over a year and
       // all of it was only ever summed into one number.
       rpc<CookieChannel>('cookie_units_by_channel', P),
-      select<any>(`v_flavour_monthly?select=month,flavour,units${locFilter ? locFilter.replace('&', '&') : ''}`),
-      select<any>('flavour_calendar?select=flavour,year_month&role=eq.monthly_special'),
       select<any>('locations?select=id,name,code&order=id'),
     ]);
   } catch (e: any) {
@@ -161,63 +235,6 @@ export async function GET(req: Request) {
       total: Object.values(channels).reduce((a, b) => a + b, 0),
     }));
 
-  // ---- the flavour programme ----
-  const specialFor = new Map<string, string>();
-  for (const c of calendar) specialFor.set(String(c.year_month).slice(0, 7), c.flavour);
-
-  const monthTotals = new Map<string, number>();
-  const monthFlavour = new Map<string, Map<string, number>>();
-  for (const r of flavourMonths) {
-    const m = String(r.month).slice(0, 7);
-    monthTotals.set(m, (monthTotals.get(m) || 0) + n(r.units));
-    if (!monthFlavour.has(m)) monthFlavour.set(m, new Map());
-    const t = monthFlavour.get(m)!;
-    t.set(r.flavour, (t.get(r.flavour) || 0) + n(r.units));
-  }
-  const months = [...monthTotals.keys()].sort();
-  const thisMonth = businessToday().slice(0, 7);
-
-  const specials = months
-    .filter((m) => specialFor.has(m))
-    .map((m) => {
-      const sold = monthFlavour.get(m);
-      const flavour = resolveFlavour(specialFor.get(m)!, sold?.keys() ?? []);
-      const units = sold?.get(flavour) ?? 0;
-      const total = monthTotals.get(m) || 1;
-      const prevMonth = months[months.indexOf(m) - 1];
-      const prevTotal = prevMonth ? monthTotals.get(prevMonth) ?? 0 : 0;
-      return {
-        month: m,
-        flavour,
-        units,
-        share: (units / total) * 100,
-        totalCookies: total,
-        // Did the category grow that month, or did the special just take share?
-        // A partial current month against a full previous one is meaningless.
-        categoryGrowth: prevTotal && m !== thisMonth ? ((total - prevTotal) / prevTotal) * 100 : null,
-        preTocumen: m < TOCUMEN_OPENED.slice(0, 7),
-        current: m === thisMonth,
-      };
-    })
-    .filter((s) => s.units > 0 || s.current);
-
-  // Permanent menu: present in most months, for comparison against the specials.
-  const presence = new Map<string, number>();
-  for (const m of months) {
-    for (const [f, u] of monthFlavour.get(m) ?? []) {
-      if ((u / (monthTotals.get(m) || 1)) * 100 >= 1) presence.set(f, (presence.get(f) || 0) + 1);
-    }
-  }
-  const permanent = [...presence.entries()]
-    .filter(([, count]) => count >= months.length * 0.6)
-    .map(([flavour]) => {
-      const shares = months
-        .map((m) => ((monthFlavour.get(m)?.get(flavour) ?? 0) / (monthTotals.get(m) || 1)) * 100)
-        .filter((v) => v >= 0.5);
-      return { flavour, share: shares.reduce((a, b) => a + b, 0) / (shares.length || 1) };
-    })
-    .sort((a, b) => b.share - a.share);
-
   return NextResponse.json({
     range: { from, to, days: spanDays, grouping: byMonth ? 'month' : 'day' },
     crossesTocumenOpening: from < TOCUMEN_OPENED && to >= TOCUMEN_OPENED,
@@ -242,7 +259,5 @@ export async function GET(req: Request) {
       }),
     },
     timeline,
-    specials: specials.slice().sort((a, b) => b.share - a.share),
-    permanent,
   }, { headers: { 'Cache-Control': 'no-store' } });
 }
