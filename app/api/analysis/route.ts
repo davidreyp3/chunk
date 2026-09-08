@@ -107,19 +107,26 @@ export async function GET(req: Request) {
     : ALL_CHANNELS);
 
   // Nothing else pulls from INVU, so without this the Analysis page shows
-  // whatever the TV board last happened to fetch. But the pull takes ~10s, and
-  // on a twelve-month range today is 0.3% of the data — not worth making every
-  // tab switch wait for it. So: block only on short ranges, where today is a
-  // material share of what is on screen, and otherwise start the refresh and
-  // serve the current figures immediately.
-  const P = { p_from: from, p_to: to, p_loc: locId };
-
+  // whatever the TV board last happened to fetch. Two limits on that:
+  //
+  //   * On a long range today is a rounding error (0.3% of a year), so the
+  //     refresh is started and the current figures served immediately.
+  //   * On a short range today matters, so we wait — but only up to a couple of
+  //     seconds. A cold pull of both licences takes ~17s, which is far too long
+  //     to sit on a "Today" click. Past the cap the refresh carries on in the
+  //     background and lands on the next request, which is at most 90s of
+  //     staleness rather than a page that feels broken.
   const SHORT_RANGE_DAYS = 31;
+  const MAX_WAIT_MS = 2_500;
   if (to >= businessToday()) {
     const span = Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
     const pull = refreshToday().catch(() => { /* stale beats broken */ });
-    if (span <= SHORT_RANGE_DAYS) await pull;
+    if (span <= SHORT_RANGE_DAYS) {
+      await Promise.race([pull, new Promise((r) => setTimeout(r, MAX_WAIT_MS))]);
+    }
   }
+
+  const P = { p_from: from, p_to: to, p_loc: locId };
 
 
   // Tabs that are answered entirely by a database function.

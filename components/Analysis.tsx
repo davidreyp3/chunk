@@ -60,6 +60,9 @@ const monthEnd = (back = 0) => {
 };
 
 const PRESETS: { id: string; label: string; range: () => [string, string] }[] = [
+  // `today()` is Panama's business day, not the browser's — a phone on Italian
+  // time would otherwise ask for tomorrow and come back empty.
+  { id: 'today', label: 'Today',          range: () => [iso(today()), iso(today())] },
   { id: '7d',    label: 'Last 7 days',    range: () => [shiftDays(6), iso(today())] },
   { id: '30d',   label: 'Last 30 days',   range: () => [shiftDays(29), iso(today())] },
   { id: 'month', label: 'This month',     range: () => [monthStart(), iso(today())] },
@@ -194,7 +197,7 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
         </div>
 
         <div style={{ ...sub, marginTop: -4 }}>
-          {longDate(from)} → {longDate(to)}{data ? ` · ${data.range.days} days` : ''}
+          {longDate(from)} → {longDate(to)}{data ? ` · ${data.range.days} ${data.range.days === 1 ? 'day' : 'days'}` : ''}
         </div>
 
         {/* Which order types count. Everything below follows this. */}
