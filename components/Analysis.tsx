@@ -66,6 +66,7 @@ const PRESETS: { id: string; label: string; range: () => [string, string] }[] = 
   { id: '7d',    label: 'Last 7 days',    range: () => [shiftDays(6), iso(today())] },
   { id: '30d',   label: 'Last 30 days',   range: () => [shiftDays(29), iso(today())] },
   { id: 'month', label: 'This month',     range: () => [monthStart(), iso(today())] },
+  { id: 'ytd',   label: 'Year to date',   range: () => [`${iso(today()).slice(0, 4)}-01-01`, iso(today())] },
   { id: 'prev',  label: 'Last month',     range: () => [monthStart(1), monthEnd(1)] },
   { id: '12m',   label: 'Last 12 months', range: () => [monthStart(11), iso(today())] },
   { id: 'all',   label: 'All time',       range: () => ['2024-10-01', iso(today())] },
@@ -101,6 +102,23 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
   // Tocumen opening, which the banner warns about.
   const [preset, setPreset] = useState('month');
   const [custom, setCustom] = useState<[string, string] | null>(null);
+  // The date inputs write here first, and only reach `custom` — which is what
+  // triggers loading — once they have been left alone for a moment. A native
+  // date picker fires a change for every value it passes through while you
+  // scroll or type, and each one used to launch the heavy queries. Several at
+  // once pushed the free-tier database past its statement timeout, and Postgres
+  // cancelled them (error 57014): the failure on picking 1 January.
+  const [draft, setDraft] = useState<[string, string] | null>(null);
+  const DATE_SETTLE_MS = 600;
+  useEffect(() => {
+    if (!draft) return;
+    const [f, t] = draft;
+    // A half-typed date arrives as '' or with a year like 0002; never load one.
+    const ok = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= '2024-10-01';
+    if (!ok(f) || !ok(t) || f > t) return;
+    const id = setTimeout(() => setCustom([f, t]), DATE_SETTLE_MS);
+    return () => clearTimeout(id);
+  }, [draft]);
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [channels, setChannels] = useState<string[]>(ORDER);
@@ -173,7 +191,7 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
           {PRESETS.map((p) => {
             const on = !custom && preset === p.id;
             return (
-              <button key={p.id} onClick={() => { setCustom(null); setPreset(p.id); }}
+              <button key={p.id} onClick={() => { setDraft(null); setCustom(null); setPreset(p.id); }}
                 style={{ padding: '8px 13px', borderRadius: 999, fontSize: 13.5, cursor: 'pointer',
                          border: '1px solid ' + (on ? 'transparent' : 'var(--tv-line)'),
                          background: on ? 'var(--tv-ink)' : 'transparent',
@@ -188,11 +206,11 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
             );
           })}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, ...sub }}>
-            <input type="date" value={from} max={to} style={dateInput}
-                   onChange={(e) => setCustom([e.target.value, to])} />
+            <input type="date" value={draft?.[0] ?? from} max={draft?.[1] ?? to} style={dateInput}
+                   onChange={(e) => setDraft([e.target.value, draft?.[1] ?? to])} />
             <span>→</span>
-            <input type="date" value={to} min={from} max={iso(today())} style={dateInput}
-                   onChange={(e) => setCustom([from, e.target.value])} />
+            <input type="date" value={draft?.[1] ?? to} min={draft?.[0] ?? from} max={iso(today())} style={dateInput}
+                   onChange={(e) => setDraft([draft?.[0] ?? from, e.target.value])} />
           </div>
         </div>
 
