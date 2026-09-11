@@ -90,7 +90,12 @@ function flavourProgramme(flavourMonths: any[], calendar: any[]) {
     })
     .sort((a, b) => b.share - a.share);
 
-  return { specials: specials.slice().sort((a, b) => b.share - a.share), permanent };
+  // Ranked by units sold, as David asked. Note what that measures: every
+  // special since November 2025 sold into two stores, every one before it into
+  // Sunset alone at about a third of the volume, so absolute units favour recent
+  // months regardless of how the flavour did. Share is still returned and shown
+  // on each row so that is visible rather than hidden.
+  return { specials: specials.slice().sort((a, b) => b.units - a.units), permanent };
 }
 
 export async function GET(req: Request) {

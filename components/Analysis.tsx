@@ -348,10 +348,11 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
             <div style={card}>
               <div style={cap}>Monthly specials</div>
               <div style={{ ...sub, margin: '8px 0 16px', maxWidth: '68ch' }}>
-                Ranked by share of all cookies sold{' '}
-                <strong style={{ color: 'var(--tv-ink2)' }}>during that flavour&rsquo;s own month</strong>
-                {' '}— never absolute units, since traffic and prices differ. Months before November 2025
-                are Sunset-only, at roughly a third of today&rsquo;s volume, and are marked.
+                Ranked by <strong style={{ color: 'var(--tv-ink2)' }}>units sold</strong> during
+                each flavour&rsquo;s own month. Share of that month&rsquo;s cookies is shown beside
+                it, because units alone favour recent months: before November 2025 only Sunset was
+                open, at roughly a third of today&rsquo;s volume, so those specials are marked
+                &ldquo;Sunset only&rdquo; and rank lower than they performed.
               </div>
               {flavours
                 ? <Specials rows={flavours.specials} scaleTo={flavours.permanent[0]?.share ?? 25} />
@@ -454,41 +455,53 @@ function Timeline({ rows, openedOn }: { rows: Data['timeline']; openedOn: string
 function Specials({ rows, scaleTo, plain }: {
   rows: Special[]; scaleTo: number; plain?: boolean;
 }) {
-  const max = Math.max(...rows.map((r) => r.share), scaleTo, 1);
+  // The monthly list is ranked and drawn by units sold. The permanent menu has
+  // no units of its own (it is an average share), so it stays on share.
+  const byUnits = !plain;
+  const measure = (r: Special) => (byUnits ? r.units : r.share);
+  const max = byUnits
+    ? Math.max(...rows.map((r) => r.units), 1)
+    : Math.max(...rows.map((r) => r.share), scaleTo, 1);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-      {rows.map((r) => (
+      {rows.map((r, i) => (
         <div key={r.flavour + r.month}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 5,
                         flexWrap: 'wrap' }}>
             <div style={{ fontSize: 15, fontWeight: r.current ? 700 : 500,
                           color: r.current ? 'var(--tv-accent)' : 'var(--tv-ink)' }}>
+              {byUnits && <span style={{ color: 'var(--tv-ink5)', fontWeight: 500 }}>{i + 1}. </span>}
               {r.flavour}
             </div>
             {!plain && (
               <div style={{ fontSize: 12.5, color: 'var(--tv-ink4)' }}>
                 {periodLabel(r.month)}
-                {r.units > 0 && ` · ${num(r.units)} units`}
+                {` · ${r.share.toFixed(1)}% of that month's cookies`}
                 {r.preTocumen && ' · Sunset only'}
                 {r.current && ' · running now'}
               </div>
             )}
             <div style={{ marginLeft: 'auto', fontSize: 15, fontWeight: 700 }}>
-              {r.share.toFixed(1)}%
+              {byUnits ? `${num(r.units)} units` : `${r.share.toFixed(1)}%`}
             </div>
           </div>
           <div style={{ height: 9, borderRadius: 4, background: 'var(--tv-track)' }}>
-            <div style={{ height: 9, borderRadius: 4, width: `${(r.share / max) * 100}%`,
+            <div style={{ height: 9, borderRadius: 4, width: `${(measure(r) / max) * 100}%`,
                           background: r.current ? 'var(--tv-accent)'
                             : r.preTocumen ? 'rgba(60,32,23,0.28)' : 'var(--tv-ink2)' }} />
           </div>
           {!plain && r.categoryGrowth !== null && !r.current && (
             <div style={{ fontSize: 12.5, marginTop: 5,
-                          color: r.categoryGrowth >= 0 ? 'var(--tv-pos)' : 'var(--tv-neg)' }}>
-              Total cookies {r.categoryGrowth >= 0 ? '+' : ''}{r.categoryGrowth.toFixed(0)}% on the month before
-              <span style={{ color: 'var(--tv-ink5)' }}>
-                {' — '}{r.categoryGrowth >= 0 ? 'grew the category' : 'took share from it'}
-              </span>
+                          color: Math.abs(r.categoryGrowth) < 0.5 ? 'var(--tv-ink4)'
+                            : r.categoryGrowth > 0 ? 'var(--tv-pos)' : 'var(--tv-neg)' }}>
+              {/* Under half a percent rounds to "-0%" and is not a real move either
+                  way, so it is called flat rather than credited or blamed. */}
+              {Math.abs(r.categoryGrowth) < 0.5
+                ? <>Total cookies flat on the month before</>
+                : <>Total cookies {r.categoryGrowth > 0 ? '+' : ''}{r.categoryGrowth.toFixed(0)}% on the month before
+                    <span style={{ color: 'var(--tv-ink5)' }}>
+                      {' — '}{r.categoryGrowth > 0 ? 'grew the category' : 'took share from it'}
+                    </span></>}
             </div>
           )}
         </div>
