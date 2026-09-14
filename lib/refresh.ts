@@ -11,26 +11,21 @@ const CREDS: Record<number, { user?: string; pass?: string }> = {
   2: { user: process.env.INVU_SUNSET_USER, pass: process.env.INVU_SUNSET_PASS },
 };
 
-export async function refreshToday(force = false) {
-  const day = businessToday();
-
-  if (!force) {
-    const [last] = await select<{ fetched_at: string }>(
-      'raw_orders?select=fetched_at&order=fetched_at.desc',
-    ).then((r) => r.slice(0, 1));
-    if (last && Date.now() - Date.parse(last.fetched_at) < MIN_INTERVAL_MS) {
-      return { skipped: true as const, day };
-    }
-  }
-
+/** Pull the given business days from INVU for every active location and upsert
+ *  them. Idempotent: re-pulling a day already held rewrites the same rows, so
+ *  running it twice, or over a day that is already complete, is harmless. */
+async function pullDays(days: string[]) {
   const channels = new Map<string, ChannelRow>(
     (await select<ChannelRow>('order_type_channel?select=*')).map((c) => [`${c.location_id}:${c.tipo_orden}`, c]),
   );
   const locations = await select<{ id: number }>('locations?select=id&active=is.true&order=id');
 
-  let count = 0;
   const unmapped: string[] = [];
   const now = new Date().toISOString();
+  const counts: Record<string, number> = {};
+
+  for (const day of days) {
+  let count = 0;
 
   for (const loc of locations) {
     const { user, pass } = CREDS[loc.id] ?? {};
@@ -68,6 +63,31 @@ export async function refreshToday(force = false) {
     if (raws.length) await upsert('raw_orders', raws, 'location_id,invu_order_id');
     count += orders.length;
   }
+  counts[day] = count;
+  }
 
-  return { skipped: false as const, day, orders: count, unmapped: [...new Set(unmapped)] };
+  return { counts, unmapped: [...new Set(unmapped)] };
+}
+
+export async function refreshToday(force = false) {
+  const day = businessToday();
+
+  if (!force) {
+    const [last] = await select<{ fetched_at: string }>(
+      'raw_orders?select=fetched_at&order=fetched_at.desc',
+    ).then((r) => r.slice(0, 1));
+    if (last && Date.now() - Date.parse(last.fetched_at) < MIN_INTERVAL_MS) {
+      return { skipped: true as const, day };
+    }
+  }
+
+  const { counts, unmapped } = await pullDays([day]);
+  return { skipped: false as const, day, orders: counts[day] ?? 0, unmapped };
+}
+
+/** For the nightly catch-up job. The live refresh only ever pulls today, and
+ *  only while a browser has the board open, so a day nobody watched was never
+ *  copied: 9, 10, 12 and 13 September 2026 went missing that way. */
+export async function refreshDays(days: string[]) {
+  return pullDays(days);
 }
