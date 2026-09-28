@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Nav, { type View } from '@/components/Nav';
-import { HoursTab, TipsTab, ProductTab, ChannelsTab, StoresTab, DiscountsTab } from '@/components/AnalysisTabs';
+import { HoursTab, TipsTab, ProductTab, ChannelsTab, StoresTab, DiscountsTab, DailyCloseTab } from '@/components/AnalysisTabs';
 
 const T = {
   '--tv-bg': '#EDDECD', '--tv-panel': '#FEF4E7', '--tv-panel2': '#F6E8D6',
@@ -74,6 +74,7 @@ const PRESETS: { id: string; label: string; range: () => [string, string] }[] = 
 
 const TABS = [
   { id: 'sales',    label: 'Sales over time' },
+  { id: 'close',    label: 'Daily close' },
   { id: 'flavours', label: 'Flavour programme' },
   { id: 'hours',    label: 'Hours & shifts' },
   { id: 'tips',     label: 'Tips' },
@@ -376,6 +377,7 @@ export default function Analysis({ view, onSelect }: { view: View; onSelect: (v:
             </>
             )}
 
+            {tab === 'close' && <DailyCloseTab q={q} />}
             {tab === 'hours' && (
               <HoursTab q={q} locations={data.kpis.byLocation.filter((l) => l.orders > 0)} />
             )}

@@ -65,6 +65,19 @@ export function normalize(o: any, locationId: number, channels: Map<string, Chan
     amount: num(p.monto), paid_at: ts(p.fecha_pago),
   }));
 
+
+  // The method matters: Vale adds each tip to the takings of the method it came
+  // in on, which is what INVU's "propina por orden" report is for. orders.tip
+  // keeps the total; this keeps the split.
+  const tips = (o.propinas || []).map((t: any) => ({
+    location_id: locationId, invu_order_id: id, invu_tip_id: String(t.id),
+    amount: num(t.monto),
+    method: (fix(t.metodoPago) || '').toUpperCase() || null,
+    pay_type: fix(t.tipoPago), tip_kind: fix(t.descTipo),
+    automatic: t.automatica === 'Automatica',
+    is_service: !!t.is_service, is_donation: !!t.is_donation,
+  }));
+
   const clientRow = client
     ? {
         location_id: locationId, invu_client_id: String(client.id),
@@ -73,7 +86,7 @@ export function normalize(o: any, locationId: number, channels: Map<string, Chan
       }
     : null;
 
-  return { order, lines, mods, pays, clientRow };
+  return { order, lines, mods, pays, tips, clientRow };
 }
 
 /** Accents and case removed, for matching a name typed by hand against the

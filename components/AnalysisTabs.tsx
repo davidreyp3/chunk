@@ -16,7 +16,8 @@ const sub: React.CSSProperties = { fontSize: 13.5, color: 'var(--tv-ink4)', line
 const stack: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 14 };
 
 export function Card({ title, note, children }: {
-  title?: string; note?: React.ReactNode; children: React.ReactNode;
+  // children is optional: a card can be nothing but an explanation.
+  title?: string; note?: React.ReactNode; children?: React.ReactNode;
 }) {
   return (
     <div style={card}>
@@ -837,6 +838,144 @@ export function DiscountsTab({ q }: { q: string }) {
       <Card title="What gets discounted" note="By the money given away, top 12 products.">
         <Ranked rows={products.map(([k, v]) => [k, { units: v.units, revenue: v.given }])} />
       </Card>
+    </div>
+  );
+}
+
+/* ---------- daily close ---------- */
+
+type CloseRow = { location_id: number; business_date: string; method: string;
+                  pay_type: string; ventas: string; propina: string };
+type CoverRow = { location_id: number; business_date: string;
+                  tips_total: string; tips_split: string };
+
+const TH: React.CSSProperties = { fontWeight: 500, fontSize: 11.5, color: 'var(--tv-ink4)',
+                                  padding: '0 10px 6px', whiteSpace: 'nowrap' };
+const TD: React.CSSProperties = { padding: '7px 10px', textAlign: 'right',
+                                  fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' };
+
+/** The takings Vale reconciles each day: INVU's "por tipo de pago" and "propina
+ *  por orden" in one line per day. Cash is derived rather than summed — INVU
+ *  records a cash payment as the amount handed over, so a $5 sale paid with a
+ *  $20 note is stored as $20. Card and the rest are exact. */
+export function DailyCloseTab({ q }: { q: string }) {
+  const { data, loading } = useSection<{ rows: CloseRow[]; coverage: CoverRow[];
+                                         locations: { id: number; name: string }[] }>('close', q);
+  if (!data?.rows) return <Pending loading={loading} error={data?.error} />;
+
+  const n = (v: any) => Number(v || 0);
+  const locName = (id: number) => data.locations?.find((l) => l.id === id)?.name ?? `Location ${id}`;
+
+  type Cell = { cashV: number; cashT: number; cardV: number; cardT: number; otherV: number; otherT: number };
+  const blank = (): Cell => ({ cashV: 0, cashT: 0, cardV: 0, cardT: 0, otherV: 0, otherT: 0 });
+  const byLoc = new Map<number, Map<string, Cell>>();
+  for (const r of data.rows) {
+    if (!byLoc.has(r.location_id)) byLoc.set(r.location_id, new Map());
+    const days = byLoc.get(r.location_id)!;
+    if (!days.has(r.business_date)) days.set(r.business_date, blank());
+    const c = days.get(r.business_date)!;
+    const v = n(r.ventas), t = n(r.propina);
+    if (r.method === 'EFECTIVO') { c.cashV += v; c.cashT += t; }
+    else if (r.method === 'CREDITO' || r.method === 'DEBITO') { c.cardV += v; c.cardT += t; }
+    else { c.otherV += v; c.otherT += t; }
+  }
+
+  // Tips recorded before the detailed history begins have a total but no
+  // method. Saying so beats quietly showing less.
+  const unsplit = new Map<string, number>();
+  for (const c of data.coverage) {
+    const gap = n(c.tips_total) - n(c.tips_split);
+    if (gap > 0.005) unsplit.set(`${c.business_date}|${c.location_id}`, gap);
+  }
+
+  if (!byLoc.size) return <Card title="Daily close"><div style={sub}>Nothing in this range.</div></Card>;
+  const dayLabel = (d: string) =>
+    new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { day: '2-digit', month: 'short', weekday: 'short' });
+
+  return (
+    <div style={stack}>
+      <Card title="Daily close"
+            note={<>INVU&rsquo;s two reports in one line per day: takings by payment type, with
+                    each tip added to the method it came in on. Cash is the day&rsquo;s sales less
+                    every other method — INVU records a cash payment as the amount handed over,
+                    change included, so adding those up would overstate the drawer.</>} />
+
+      {[...byLoc.entries()].sort((a, b) => a[0] - b[0]).map(([loc, days]) => {
+        const rows = [...days.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+        const sum = rows.reduce((s, [, c]) => ({
+          cashV: s.cashV + c.cashV, cashT: s.cashT + c.cashT,
+          cardV: s.cardV + c.cardV, cardT: s.cardT + c.cardT,
+          otherV: s.otherV + c.otherV, otherT: s.otherT + c.otherT,
+        }), blank());
+        const anyOther = rows.some(([, c]) => c.otherV || c.otherT);
+        const total = (c: Cell) => c.cashV + c.cashT + c.cardV + c.cardT + c.otherV + c.otherT;
+        return (
+          <Card key={loc} title={locName(loc)}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', fontSize: 13, minWidth: anyOther ? 700 : 620 }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...TH, textAlign: 'left' }} />
+                    <th style={{ ...TH, textAlign: 'center', borderBottom: '1px solid var(--tv-line)' }} colSpan={3}>EFECTIVO</th>
+                    <th style={{ ...TH, textAlign: 'center', borderBottom: '1px solid var(--tv-line)' }} colSpan={3}>TARJETA</th>
+                    {anyOther && <th style={{ ...TH, textAlign: 'center', borderBottom: '1px solid var(--tv-line)' }}>OTROS</th>}
+                    <th style={{ ...TH }} />
+                  </tr>
+                  <tr>
+                    <th style={{ ...TH, textAlign: 'left' }}>Día</th>
+                    <th style={{ ...TH, textAlign: 'right' }}>Ventas</th>
+                    <th style={{ ...TH, textAlign: 'right' }}>Propina</th>
+                    <th style={{ ...TH, textAlign: 'right' }}>Total</th>
+                    <th style={{ ...TH, textAlign: 'right' }}>Ventas</th>
+                    <th style={{ ...TH, textAlign: 'right' }}>Propina</th>
+                    <th style={{ ...TH, textAlign: 'right' }}>Total</th>
+                    {anyOther && <th style={{ ...TH, textAlign: 'right' }}>Total</th>}
+                    <th style={{ ...TH, textAlign: 'right' }}>Día</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(([date, c]) => {
+                    const gap = unsplit.get(`${date}|${loc}`);
+                    return (
+                      <tr key={date} style={{ borderTop: '1px solid var(--tv-line)' }}>
+                        <td style={{ ...TD, textAlign: 'left' }}>
+                          {dayLabel(date)}
+                          {gap ? <span style={{ color: 'var(--tv-accent)' }} title={`${money2(gap)} of tips not split by method`}> *</span> : null}
+                        </td>
+                        <td style={TD}>{money2(c.cashV)}</td>
+                        <td style={{ ...TD, color: c.cashT ? 'var(--tv-ink)' : 'var(--tv-ink5)' }}>{c.cashT ? money2(c.cashT) : '—'}</td>
+                        <td style={{ ...TD, fontWeight: 600 }}>{money2(c.cashV + c.cashT)}</td>
+                        <td style={TD}>{money2(c.cardV)}</td>
+                        <td style={{ ...TD, color: c.cardT ? 'var(--tv-ink)' : 'var(--tv-ink5)' }}>{c.cardT ? money2(c.cardT) : '—'}</td>
+                        <td style={{ ...TD, fontWeight: 600 }}>{money2(c.cardV + c.cardT)}</td>
+                        {anyOther && <td style={{ ...TD, color: c.otherV ? 'var(--tv-ink)' : 'var(--tv-ink5)' }}>{c.otherV ? money2(c.otherV + c.otherT) : '—'}</td>}
+                        <td style={{ ...TD, fontWeight: 700 }}>{money2(total(c))}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr style={{ borderTop: '2px solid var(--tv-line)' }}>
+                    <td style={{ ...TD, textAlign: 'left', fontWeight: 700 }}>Total</td>
+                    <td style={{ ...TD, fontWeight: 700 }}>{money2(sum.cashV)}</td>
+                    <td style={{ ...TD, fontWeight: 700 }}>{money2(sum.cashT)}</td>
+                    <td style={{ ...TD, fontWeight: 700 }}>{money2(sum.cashV + sum.cashT)}</td>
+                    <td style={{ ...TD, fontWeight: 700 }}>{money2(sum.cardV)}</td>
+                    <td style={{ ...TD, fontWeight: 700 }}>{money2(sum.cardT)}</td>
+                    <td style={{ ...TD, fontWeight: 700 }}>{money2(sum.cardV + sum.cardT)}</td>
+                    {anyOther && <td style={{ ...TD, fontWeight: 700 }}>{money2(sum.otherV + sum.otherT)}</td>}
+                    <td style={{ ...TD, fontWeight: 700 }}>{money2(total(sum))}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            {rows.some(([d]) => unsplit.has(`${d}|${loc}`)) && (
+              <div style={{ ...sub, marginTop: 10, color: 'var(--tv-accent)' }}>
+                * Some of that day&rsquo;s tips predate the detailed record and cannot be split by
+                method, so they are not included above.
+              </div>
+            )}
+          </Card>
+        );
+      })}
     </div>
   );
 }

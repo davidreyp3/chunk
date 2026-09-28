@@ -35,12 +35,13 @@ async function pullDays(days: string[]) {
     if (!raw.length) continue;
 
     const orders: any[] = [], lines: any[] = [], mods: any[] = [], pays: any[] = [], raws: any[] = [];
+    const tips: any[] = [];
     const clients = new Map<string, any>();
 
     for (const o of raw) {
       const n = normalize(o, loc.id, channels);
       if (!n) continue;
-      orders.push(n.order); lines.push(...n.lines); mods.push(...n.mods); pays.push(...n.pays);
+      orders.push(n.order); lines.push(...n.lines); mods.push(...n.mods); pays.push(...n.pays); tips.push(...n.tips);
       if (n.clientRow) clients.set(n.clientRow.invu_client_id, n.clientRow);
       if (n.order.channel === 'unclassified' && n.order.tipo_orden != null) {
         unmapped.push(`${loc.id}:${n.order.tipo_orden}:${n.order.order_type_name}`);
@@ -60,6 +61,7 @@ async function pullDays(days: string[]) {
     if (lines.length) await upsert('order_lines', lines, 'location_id,invu_order_id,invu_line_id');
     if (mods.length) await upsert('line_modifiers', mods, 'location_id,invu_order_id,invu_line_id,seq');
     if (pays.length) await upsert('payments', pays, 'location_id,invu_order_id,invu_pay_id');
+    if (tips.length) await upsert('order_tips', tips, 'location_id,invu_order_id,invu_tip_id');
     if (raws.length) await upsert('raw_orders', raws, 'location_id,invu_order_id');
     count += orders.length;
   }

@@ -174,6 +174,13 @@ export async function GET(req: Request) {
       ]);
       return json(flavourProgramme(flavourMonths, calendar));
     }
+    if (section === 'close') {
+      const [rows, coverage, locs] = await Promise.all([
+        rpc('payment_mix_daily', P), rpc('tip_coverage_daily', P),
+        select<any>('locations?select=id,name&order=id'),
+      ]);
+      return json({ rows, coverage, locations: locs });
+    }
     if (section === 'stores') {
       const [products, dailyRows] = await Promise.all([
         rpc('product_mix', { p_from: from, p_to: to, p_loc: null }),

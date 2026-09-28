@@ -111,6 +111,8 @@ function normalize(o, locationId, channelMap) {
   };
 
   const lines = [], mods = [], pays = [];
+
+  const tips = [];
   for (const it of o.items || []) {
     lines.push({
       location_id: locationId, invu_order_id: order.invu_order_id, invu_line_id: String(it.id),
@@ -133,13 +135,22 @@ function normalize(o, locationId, channelMap) {
     amount: num(p.monto), paid_at: ts(p.fecha_pago),
   });
 
+  // Same as payments: keep the method each tip came in on, not just a total.
+  for (const t of o.propinas || []) tips.push({
+    location_id: locationId, invu_order_id: order.invu_order_id, invu_tip_id: String(t.id),
+    amount: num(t.monto), method: (fix(t.metodoPago) || '').toUpperCase() || null,
+    pay_type: fix(t.tipoPago) || null, tip_kind: fix(t.descTipo) || null,
+    automatic: t.automatica === 'Automatica',
+    is_service: !!t.is_service, is_donation: !!t.is_donation,
+  });
+
   const clientRow = client ? {
     location_id: locationId, invu_client_id: String(client.id),
     ruc: client.num_identificacion || null, name: fix(client.nombres || '').trim() || null,
     email: client.email || null, address: fix(client.direccion) || null,
   } : null;
 
-  return { order, lines, mods, pays, clientRow };
+  return { order, lines, mods, pays, tips, clientRow };
 }
 
 const monthsBetween = (from, to) => {
@@ -180,11 +191,11 @@ const monthsBetween = (from, to) => {
       const raw = await invuSales(token, from, to);
       if (!raw.length) { console.log(`  ${y}-${String(mo + 1).padStart(2, '0')}  —`); continue; }
 
-      const orders = [], lines = [], mods = [], pays = [], clients = new Map(), raws = [];
+      const orders = [], lines = [], mods = [], pays = [], tips = [], clients = new Map(), raws = [];
       for (const o of raw) {
         const n = normalize(o, loc.id, channelMap);
         if (!n) continue;
-        orders.push(n.order); lines.push(...n.lines); mods.push(...n.mods); pays.push(...n.pays);
+        orders.push(n.order); lines.push(...n.lines); mods.push(...n.mods); pays.push(...n.pays); tips.push(...n.tips);
         if (n.clientRow) clients.set(n.clientRow.invu_client_id, n.clientRow);
         if (n.order.channel === 'unclassified' && n.order.tipo_orden != null) {
           const k = `${loc.id}:${n.order.tipo_orden}:${n.order.order_type_name}`;
@@ -201,6 +212,7 @@ const monthsBetween = (from, to) => {
       if (lines.length) await upsert('order_lines', lines, 'location_id,invu_order_id,invu_line_id');
       if (mods.length)  await upsert('line_modifiers', mods, 'location_id,invu_order_id,invu_line_id,seq');
       if (pays.length)  await upsert('payments', pays, 'location_id,invu_order_id,invu_pay_id');
+      if (tips.length)  await upsert('order_tips', tips, 'location_id,invu_order_id,invu_tip_id');
       if (raws.length)  await upsert('raw_orders', raws, 'location_id,invu_order_id');
 
       totals.o += orders.length; totals.l += lines.length; totals.m += mods.length; totals.p += pays.length;
